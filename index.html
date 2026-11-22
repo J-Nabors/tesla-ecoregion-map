@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b0f14">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%226%22 fill=%22%230b0f14%22/%3E%3Cpath d=%22M4 22 12 8l6 9 4-5 6 10z%22 fill=%22%2334d399%22/%3E%3C/svg%3E">
+<title>Ecoregion Map</title>
+<link rel="stylesheet" href="vendor/maplibre-gl.css">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="map" aria-label="Map"></div>
+
+<!-- Search -->
+<div id="searchbox" class="card">
+  <form id="searchform" autocomplete="off">
+    <input id="q" type="search" placeholder="Search a place or ecoregion" enterkeyhint="search" aria-label="Search">
+    <button type="submit" class="btn go" aria-label="Search">Go</button>
+  </form>
+  <div id="results" hidden></div>
+</div>
+
+<!-- Right control stack -->
+<div id="rightstack">
+  <button id="btnLayers" class="fab" aria-label="Layers"><svg viewBox="0 0 24 24"><path d="M12 3 2 8.5l10 5.5 10-5.5L12 3Zm-7.6 9.3L2 13.6 12 19l10-5.4-2.4-1.3L12 16.4l-7.6-4.1Z"/></svg><span>Layers</span></button>
+  <button id="btnZoomIn" class="fab" aria-label="Zoom in"><svg viewBox="0 0 24 24"><path d="M11 4h2v7h7v2h-7v7h-2v-7H4v-2h7z"/></svg></button>
+  <button id="btnZoomOut" class="fab" aria-label="Zoom out"><svg viewBox="0 0 24 24"><path d="M4 11h16v2H4z"/></svg></button>
+  <button id="btnNorth" class="fab" aria-label="Reset view to USA"><svg viewBox="0 0 24 24"><path d="M3 5.5 9 3l6 2.5L21 3v15.5L15 21l-6-2.5L3 21V5.5Zm6-.3v11.6l6 2.5V7.7L9 5.2Z"/></svg><span>USA</span></button>
+  <button id="btnLocate" class="fab locate" aria-label="Show my location"><svg viewBox="0 0 24 24"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm9 3h-2.1A7 7 0 0 0 13 5.1V3h-2v2.1A7 7 0 0 0 5.1 11H3v2h2.1a7 7 0 0 0 5.9 5.9V21h2v-2.1a7 7 0 0 0 5.9-5.9H21v-2Zm-9 6a5 5 0 1 1 0-10 5 5 0 0 1 0 10Z"/></svg><span id="locateLabel">Locate</span></button>
+</div>
+
+<!-- Bottom-left: tap toggle + where am I -->
+<div id="bottombar">
+  <button id="btnTap" class="pill" aria-pressed="false">
+    <span class="dot"></span><span class="lbl">Tap info: <b id="tapState">OFF</b></span>
+  </button>
+  <button id="whereami" class="card where" hidden>
+    <div class="wl">You are in</div>
+    <div id="whereL4" class="wv"></div>
+    <div id="whereL3" class="ws"></div>
+  </button>
+</div>
+
+<!-- Layer drawer -->
+<aside id="drawer" class="sheet left" hidden aria-label="Layers">
+  <header><h2>Map layers</h2><button class="btn close" data-close="drawer" aria-label="Close">✕</button></header>
+  <div class="sheetbody">
+    <h3>Base map</h3>
+    <div id="baseList" class="radiolist"></div>
+    <h3>Ecoregions (EPA)</h3>
+    <div class="row toggle"><label><input type="checkbox" id="tL3" checked><span>Level III</span></label></div>
+    <div class="row slider"><span>Opacity</span><input type="range" id="oL3" min="0" max="100" value="30"><output id="oL3v">30%</output></div>
+    <div class="row toggle"><label><input type="checkbox" id="tL4" checked><span>Level IV <small>(zoom in past state level)</small></span></label></div>
+    <div class="row slider"><span>Opacity</span><input type="range" id="oL4" min="0" max="100" value="30"><output id="oL4v">30%</output></div>
+    <div class="row toggle"><label><input type="checkbox" id="tLab" checked><span>Region labels</span></label></div>
+    <h3>Extra overlays</h3>
+    <div class="row toggle"><label><input type="checkbox" id="tORM"><span>OpenRailwayMap railways</span></label></div>
+    <div class="row toggle"><label><input type="checkbox" id="tHS"><span>Hillshade (terrain relief)</span></label></div>
+    <div class="row toggle"><label><input type="checkbox" id="tNLCD"><span>Land cover (NLCD 2021, lower 48)</span></label></div>
+    <div class="row slider"><span>Land cover opacity</span><input type="range" id="oNLCD" min="0" max="100" value="55"><output id="oNLCDv">55%</output></div>
+    <p class="note">Ecoregion data: U.S. EPA Level III &amp; IV ecoregions (CONUS Level IV, 2013; Alaska Level III). Descriptions come from EPA ecoregion descriptions and state posters. <a href="#" id="aboutLink">About this map</a></p>
+  </div>
+</aside>
+
+<!-- Info panel -->
+<aside id="panel" class="sheet right" hidden aria-label="Ecoregion details">
+  <header><div id="panelTitle"></div><button class="btn close" data-close="panel" aria-label="Close">✕</button></header>
+  <div id="panelBody" class="sheetbody"></div>
+</aside>
+
+<div id="modal" hidden><div class="card modalcard"><div id="modalBody"></div><button class="btn primary" id="modalOk">OK</button></div></div>
+<div id="toast" hidden></div>
+
+<script src="vendor/maplibre-gl.js"></script>
+<script src="vendor/pmtiles.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
