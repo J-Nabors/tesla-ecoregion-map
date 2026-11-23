@@ -7,9 +7,11 @@ const OSM_ATTR = '(c) <a href="https://www.openstreetmap.org/copyright">OpenStre
 const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/';
 
 /* ---------- Base maps ---------- */
-/* has: map content a base already draws, so the matching overlay toggle is disabled on it.
-   Audited from the tiles at z9-z13: OSM, OpenRailwayMap (grey OSM), Esri Topo, OpenTopoMap and USGS Topo all draw
-   roads, city/town names and county boundaries; satellite, elevation and shaded relief draw none of them. */
+/* has: map content a base already draws (informational since v5). Audited from the tiles at z9-z13: OSM,
+   OpenRailwayMap (grey OSM), Esri Topo, OpenTopoMap and USGS Topo all draw roads, city/town names and county
+   boundaries; satellite, elevation and shaded relief draw none of them. The Highways / Counties / Place names
+   overlays stay available on every base because they are drawn ABOVE the ecoregion layers, while a base's own
+   roads and names sit underneath the ecoregion fills. */
 const ALL = { roads: true, cities: true, counties: true };
 const BASES = [
   { id: 'sat', name: 'Satellite', sub: 'Esri World Imagery', tiles: [ESRI + 'World_Imagery/MapServer/tile/{z}/{y}/{x}'], max: 19,
@@ -243,8 +245,7 @@ function buildStyle() {
         'text-rotate': ['coalesce', ['get', 'rot'], 0],
         'text-font': ['Open Sans Semibold'], 'text-line-height': 1.1,
         'text-size': ['interpolate', ['linear'], ['zoom'], 7, 12, 10, 14.5, 13, 16.5], 'text-max-width': 40,
-        'symbol-sort-key': ['-', 0, ['get', 'r']], 'text-padding': 3,
-        'text-variable-anchor': ['center', 'top', 'bottom'], 'text-radial-offset': 0.25 },
+        'symbol-sort-key': ['-', 0, ['get', 'r']], 'text-padding': 3 },
       paint: { 'text-halo-color': 'rgba(0,0,0,.9)', 'text-halo-width': 1.9, 'text-halo-blur': 0.3 } },
     { id: 'l3-label', type: 'symbol', source: 'lab', 'source-layer': 'l3lab', minzoom: 3, maxzoom: 8.5,
       // largest part of each region from z3; other parts once they are big enough on screen (minz), never before z4.5
@@ -257,8 +258,7 @@ function buildStyle() {
           3, ['interpolate', ['linear'], ['get', 'r'], 15000, 9, 60000, 10.5, 150000, 12],
           5, ['interpolate', ['linear'], ['get', 'r'], 15000, 11, 60000, 13, 150000, 15],
           8, 19, 12, 21], 'text-max-width': 40,
-        'symbol-sort-key': ['-', 0, ['get', 'r']], 'text-padding': 4,
-        'text-variable-anchor': ['center', 'top', 'bottom'], 'text-radial-offset': 0.25 },
+        'symbol-sort-key': ['-', 0, ['get', 'r']], 'text-padding': 4 },
       paint: { 'text-halo-color': 'rgba(0,0,0,.9)', 'text-halo-width': 2.0, 'text-halo-blur': 0.3 } },
     { id: 'me-acc', type: 'fill', source: 'me', filter: ['==', '$type', 'Polygon'], paint: { 'fill-color': '#1a73e8', 'fill-opacity': 0.14 } },
     { id: 'me-acc-line', type: 'line', source: 'me', filter: ['==', '$type', 'Polygon'], paint: { 'line-color': '#4f95f0', 'line-width': 1.5, 'line-opacity': 0.8 } },
@@ -272,6 +272,7 @@ function buildStyle() {
     const before = layers.findIndex(l => l.id === 'me-acc');
     layers.splice(before, 0, { id: 'l' + lv + '-forced', type: 'symbol', source: 'forced', filter: ['==', ['get', 'lvl'], lv],
       layout: { ...base.layout, 'text-allow-overlap': true, 'text-ignore-placement': true, 'symbol-sort-key': undefined,
+        'text-anchor': ['coalesce', ['get', 'anc'], 'center'], 'text-offset': ['coalesce', ['get', 'off'], ['literal', [0, 0]]],
         'text-size': lv === 3 ? 19 : 15 }, paint: base.paint });
     delete layers[before].layout['symbol-sort-key'];
   }
@@ -292,9 +293,15 @@ function buildStyle() {
           ['format', ['get', 'code'], cf, '\n', {}, lv === 3 ? ['upcase', ['get', 'v0']] : ['get', 'v0'], nf]],
         'text-font': ['Open Sans Semibold'], 'text-size': lv === 3 ? 11 : 11, 'text-line-height': 1.05, 'text-letter-spacing': lv === 3 ? 0.05 : 0,
         'text-max-width': 40, 'text-padding': 1, 'symbol-sort-key': ['get', 'sk'],
-        'text-variable-anchor': ['center', 'top', 'bottom', 'left', 'right'], 'text-radial-offset': 0.3 }, paint: fbPaint });
+        'text-anchor': ['coalesce', ['get', 'anc'], 'center'], 'text-offset': ['coalesce', ['get', 'off'], ['literal', [0, 0]]] }, paint: fbPaint });
   }
   layers.splice(under, 0, ...fbLayers);
+  // Reference overlays (highways, counties, place names) go ABOVE every ecoregion layer - fills, borders,
+  // selection and all ecoregion labels - with only the location dot on top. Symbol layers higher in the stack
+  // are placed first, so place names also win label collisions against ecoregion tile labels.
+  const OVER = ['majorroads', 'county-line', 'county-label', 'city-label'];
+  const over = OVER.map(id => layers.splice(layers.findIndex(l => l.id === id), 1)[0]);
+  layers.splice(layers.findIndex(l => l.id === 'me-acc'), 0, ...over);
   return { version: 8, glyphs: BASE_URL + 'vendor/fonts/{fontstack}/{range}.pbf', sources, layers };
 }
 
@@ -347,7 +354,7 @@ map.on('moveend', writeHash);
    a collision). After each move/zoom (debounced) a 20x12 grid of points over the visible map is sampled;
    any Level III region (and Level IV region, when Level IV is on) covering more than 30% (but not all) of the view gets a
    label drawn at the sampled point nearest the centroid of its samples, regardless of collisions. */
-const FORCE_SHARE = 0.30, GRID_X = 20, GRID_Y = 12;
+const FORCE_SHARE = 0.30, FORCE_OFF = 0.25, GRID_X = 20, GRID_Y = 12;
 function visibleBox() {
   // the part of the map not covered by the info panel (left side on Tesla/desktop/tablet, bottom sheet on phones)
   const c = map.getCanvas(); let x0 = 0, w = c.clientWidth, h = c.clientHeight;
@@ -358,7 +365,7 @@ function visibleBox() {
   }
   return { x0, w, h };
 }
-function dominantRegions(hitLayer, prop, nameProp, box) {
+function dominantRegions(hitLayer, prop, nameProp, box, level) {
   const counts = new Map();
   for (let i = 0; i < GRID_X; i++) for (let j = 0; j < GRID_Y; j++) {
     const x = box.x0 + (i + 0.5) * box.w / GRID_X, y = (j + 0.5) * box.h / GRID_Y;
@@ -372,7 +379,9 @@ function dominantRegions(hitLayer, prop, nameProp, box) {
   for (const r of counts.values()) {
     const share = r.pts.length / (GRID_X * GRID_Y);
     // forced only between 30% and 100%: a region filling the whole view (every sample) gets no forced label
-    if (share <= FORCE_SHARE || r.pts.length >= GRID_X * GRID_Y) continue;
+    // hysteresis: a forced label appears above 30% and only goes away below 25%, so it doesn't blink at the threshold
+    const was = forcedPrev.has(level + ':' + r.code);
+    if (share <= (was ? FORCE_OFF : FORCE_SHARE) || r.pts.length >= GRID_X * GRID_Y) continue;
     const cx = r.pts.reduce((a, p) => a + p[0], 0) / r.pts.length, cy = r.pts.reduce((a, p) => a + p[1], 0) / r.pts.length;
     // candidate anchors: the region's own sample points (each one hit this region), nearest the centroid first
     const cands = r.pts.slice().sort((a, b) => ((a[0] - cx) ** 2 + (a[1] - cy) ** 2) - ((b[0] - cx) ** 2 + (b[1] - cy) ** 2));
@@ -421,30 +430,126 @@ function insideRegion(p, hitLayer, prop, code) {
   return map.queryRenderedFeatures(p, { layers: [hitLayer] }).some(f => f.properties[prop] === code);
 }
 let forceTimer = null; const BASE_FILTERS = {};
+/* ---------- Placement scoring + stickiness (forced and fallback labels) ----------
+   Each candidate placement (anchor point inside the region x text layout x text anchor) is scored by sampling
+   its text box against the rendered polygons: share inside its own region, minus a penalty for spilling into
+   neighbouring regions (spill over water/no-data is not penalised). Placements are sticky: a label that is still
+   on screen and still inside its region keeps its geographic anchor and layout across pans unless it spills
+   (own < 85% or neighbours > 10%) AND a candidate scores clearly better (+0.15). */
+const PLACE = new Map();          // 'f|3:27' / 'b|4:28a' -> { ll, t, anc, must, gen }
+let placeGen = 0, QC = new Map();
+const ANC_OFF = { center: [0, 0], top: [0, 0.35], bottom: [0, -0.35], left: [0.5, 0], right: [-0.5, 0] };
+const FONT = { // size, code scale, name scale, avg name char width (em, incl. letter spacing)
+  f3: [19, 1.2, 0.82, 0.78], f4: [15, 1.0, 0.86, 0.56], b3: [11, 1.1, 0.8, 0.74], b4: [11, 1.0, 0.86, 0.56] };
+function hitAt(x, y, hit, prop) {
+  const k = hit + '|' + Math.round(x / 3) + '|' + Math.round(y / 3);
+  if (!QC.has(k)) { const f = map.queryRenderedFeatures([x, y], { layers: [hit] })[0]; QC.set(k, f ? f.properties[prop] : null); }
+  return QC.get(k);
+}
+function textBox(font, code, t, anc) {
+  const [size, cs, ns, cw] = font, lines = t ? t.split('\n') : [];
+  const w = Math.max(code.length * size * cs * 0.62, Math.max(0, ...lines.map(l => l.length)) * size * ns * cw) + 4;
+  const h = size * 1.1 * (cs + ns * lines.length) + 4;
+  const off = ANC_OFF[anc] || [0, 0];
+  const dx = anc === 'left' ? w / 2 + off[0] * size : anc === 'right' ? -w / 2 + off[0] * size : 0;
+  const dy = anc === 'top' ? h / 2 + off[1] * size : anc === 'bottom' ? -h / 2 + off[1] * size : 0;
+  return { w, h, dx, dy };
+}
+function scoreAt(xy, bx, hit, prop, code, box) {
+  let own = 0, other = 0, n = 0;
+  const cx = xy[0] + bx.dx, cy = xy[1] + bx.dy;
+  for (const u of [-0.42, -0.21, 0, 0.21, 0.42]) for (const v of [-0.38, 0, 0.38]) {
+    const x = cx + u * bx.w, y = cy + v * bx.h; n++;
+    if (x < box.x0 || y < 0 || x > box.x0 + box.w || y > box.h) continue;   // off screen counts as neither
+    const c = hitAt(x, y, hit, prop);
+    if (c === code) own++; else if (c) other++;
+  }
+  return { own: own / n, other: other / n, s: own / n - 0.6 * other / n };
+}
+function onScreen(xy, box, m = 8) { return xy[0] > box.x0 + m && xy[1] > m && xy[0] < box.x0 + box.w - m && xy[1] < box.h - m; }
+/* pick (or keep) a placement. cands: screen points inside the region; txts: [{t, pen}]; ancs: text anchors */
+function place(key, code, hit, prop, font, cands, txts, ancs, box, avoid, t0) {
+  const prev = PLACE.get(key);
+  let cur = null;
+  if (prev) {
+    const xy = map.project(prev.ll); xy.x = +xy.x; const p = [xy.x, xy.y];
+    if (onScreen(p, box) && hitAt(p[0], p[1], hit, prop) === code && !(avoid && avoid(p))) {
+      const sc = scoreAt(p, textBox(font, code, prev.t, prev.anc), hit, prop, code, box);
+      cur = { xy: p, t: prev.t, anc: prev.anc, s: sc.s, own: sc.own, other: sc.other, kept: true };
+      if (sc.own >= 0.85 && sc.other <= 0.1) return cur;            // good enough: stay put
+    }
+  }
+  let best = null;
+  for (const xy of cands) {
+    if (avoid && avoid(xy)) continue;
+    for (const { t, pen } of txts) for (const anc of ancs) {
+      const sc = scoreAt(xy, textBox(font, code, t, anc), hit, prop, code, box), s = sc.s - pen - (anc === 'center' ? 0 : 0.03);
+      if (!best || s > best.s) best = { xy, t, anc, s, own: sc.own, other: sc.other };
+    }
+    if (performance.now() - t0 > 700) break;                          // time budget for one update
+  }
+  if (cur && (!best || best.s < cur.s + 0.15)) return cur;            // only move for a clearly better spot
+  return best || cur;
+}
+function variantsFor(name, code, lvl, w, h, font, n = 3) {
+  // the weighted layout options (as in tools/label_layouts.py), best few first, scored against the on-screen extent
+  const [size, cs, ns, cw] = font;
+  let ab = name; for (const [a, b] of ABBR) ab = ab.split(a).join(b);
+  const cands = [];
+  for (const [nm, pen] of [[name, 0], [ab !== name ? ab : null, 0.1]]) {
+    if (!nm) continue; const words = nm.split(' ');
+    for (let k = 1; k <= Math.min(4, words.length); k++) cands.push([wrapWords(words, k).join('\n'), pen + 0.05 * (k - 1)]);
+  }
+  cands.push(['', 0.3]);
+  return cands.map(([t, pen]) => {
+    const bx = textBox(font, code, t, 'center');
+    return { t, pen, fit: Math.min(1, 0.85 * w / bx.w) * Math.min(1, 0.85 * h / bx.h) - pen };
+  }).sort((a, b) => b.fit - a.fit).slice(0, n).map(v => ({ t: v.t, pen: v.pen + (1 - Math.min(1, v.fit + v.pen)) * 0.5 }));
+}
+function tilePointsInView(sl, codes, box) {
+  // label points from the tiles (pole of inaccessibility per part; inside their polygon, tools/check_labels.py)
+  const out = new Map();
+  for (const f of map.querySourceFeatures('lab', { sourceLayer: sl })) {
+    const c = f.properties.code; if (!codes.has(c) || f.geometry.type !== 'Point') continue;
+    const q = map.project(f.geometry.coordinates), p = [q.x, q.y];
+    if (!onScreen(p, box)) continue;
+    const pr = (f.properties.rank === 0 ? 1e9 : 0) + (f.properties.r || 0);
+    const l = out.get(c) || []; if (!l.some(o => Math.abs(o.xy[0] - p[0]) < 2 && Math.abs(o.xy[1] - p[1]) < 2)) l.push({ pr, xy: p }); out.set(c, l);
+  }
+  for (const l of out.values()) l.sort((a, b) => b.pr - a.pr);
+  return out;
+}
+let forcedPrev = new Set();
 function updateForcedLabels() {
   const src = map.getSource('forced'); if (!src) return;
-  const feats = [], dbg = [];
+  const feats = [], dbg = [], t0 = performance.now(); QC = new Map(); placeGen++;
+  const nowForced = new Set();
   if (S.lab) {
     const box = visibleBox();
     const lv = [];
-    if (S.l3) lv.push([3, 'l3-hit', 'c3', 'n3']);
-    if (S.l4 && map.getZoom() >= 5.5) lv.push([4, 'l4-hit', 'c4', 'n4']);
+    if (S.l3) lv.push([3, 'l3-hit', 'c3', 'n3', 'l3lab']);
+    if (S.l4 && map.getZoom() >= 5.5) lv.push([4, 'l4-hit', 'c4', 'n4', 'l4lab']);
     const placed = [];
-    for (const [level, hit, prop, nm] of lv) {
-      for (const r of dominantRegions(hit, prop, nm, box)) {
-        // keep an L3 and an L4 forced label apart by picking another of the region's own sample points
-        // (never shifting a point off its polygon); every anchor is re-checked to lie inside its region
-        const clash = p => placed.some(q => Math.abs(q[0] - p[0]) < 160 && Math.abs(q[1] - p[1]) < 60);
-        const pt = r.cands.find(p => !clash(p) && insideRegion(p, hit, prop, r.code)) || r.cands.find(p => insideRegion(p, hit, prop, r.code));
-        if (!pt) { dbg.push(`${level}:${r.code} skipped (no inside anchor)`); continue; }
-        const [x, y] = pt;
-        placed.push([x, y]);
-        const ll = map.unproject([x, y]);
-        feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [ll.lng, ll.lat] }, properties: { code: r.code, name: r.name, lvl: level, v0: fitForced(r.name, r.code, level, r.w, r.h) } });
-        dbg.push(`${level}:${r.code} ${(r.share * 100).toFixed(0)}%`);
+    for (const [level, hit, prop, nm, sl] of lv) {
+      const regs = dominantRegions(hit, prop, nm, box, level);
+      const tp = tilePointsInView(sl, new Set(regs.map(r => r.code)), box);
+      for (const r of regs) {
+        const key = 'f|' + level + ':' + r.code, font = FONT['f' + level];
+        // L3 and L4 forced labels never sit on top of each other
+        const avoid = p => placed.some(q => Math.abs(q[0] - p[0]) < 160 && Math.abs(q[1] - p[1]) < 60);
+        const cands = (tp.get(r.code) || []).slice(0, 3).map(o => o.xy).concat(r.cands.slice(0, 6));
+        const pl = place(key, r.code, hit, prop, font, cands, variantsFor(r.name, r.code, level, r.w, r.h, font), ['center'], box, avoid, t0);
+        if (!pl) { dbg.push(`${level}:${r.code} skipped (no inside anchor)`); continue; }
+        placed.push(pl.xy);
+        const ll = map.unproject(pl.xy), llA = pl.kept ? PLACE.get(key).ll : [ll.lng, ll.lat];
+        PLACE.set(key, { ll: llA, t: pl.t, anc: pl.anc, gen: placeGen });
+        nowForced.add(level + ':' + r.code);
+        feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: llA }, properties: { code: r.code, name: r.name, lvl: level, v0: pl.t, anc: pl.anc, off: ANC_OFF[pl.anc] } });
+        dbg.push(`${level}:${r.code} ${(r.share * 100).toFixed(0)}%${pl.kept ? ' kept' : ''} in=${pl.own.toFixed(2)}`);
       }
     }
   }
+  forcedPrev = nowForced;
   src.setData({ type: 'FeatureCollection', features: feats });
   // a forced label replaces that region's tile labels while it dominates the view (no duplicates)
   for (const lv of [3, 4]) {
@@ -454,14 +559,14 @@ function updateForcedLabels() {
   }
   window.__forced = dbg;
   // the fallback passes run on the following idles, once the main labels have been re-placed
-  fbPass = 1; fbForced = new Set(feats.map(f => f.properties.lvl + ':' + f.properties.code));
+  fbPass = 1; fbForced = nowForced;
 }
 /* ---------- Every region in view gets at least one label ----------
-   Pass 1 (after the main labels are placed): find regions visible in the view with no placed tile label or
-   forced label, and give each a step-down label (smaller text, abbreviated or code-only name, flexible
-   anchor) at an anchor that is inside the region: one of its own tile label points (pole of inaccessibility)
-   in view, else a grid sample that hit it. Pass 2 (next idle): any whose step-down label also collided is
-   drawn code-only and allowed to overlap. Regions covering the whole view are left unlabeled (rule: 100%). */
+   Pass 1 (after the main labels are placed): regions visible in the view with no placed tile label or forced
+   label get a step-down label (smaller text, abbreviated or code-only, best of 5 text anchors) at the best
+   scoring anchor inside the region: its own tile label points in view, grid samples that hit it, or a fine
+   search for slivers. Pass 2 (next idle): any step-down label that collided is drawn code-only and may overlap.
+   Placements (and the code-only state) are sticky across pans. Regions covering the whole view get none. */
 let fbPass = 0, fbForced = new Set(), fbFeats = [];
 const LABEL_SAMPLE = 24;
 function labelsInView(layer, box) {
@@ -477,10 +582,10 @@ function fbLevels() {
 }
 function fineAnchor(code, hit, prop, box) {
   // bounding box of the region's rendered geometry within the view, sampled on a fine grid (<= ~600 queries)
-  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; const verts = [];
   for (const f of map.queryRenderedFeatures([[box.x0, 0], [box.x0 + box.w, box.h]], { layers: [hit] })) {
     if (f.properties[prop] !== code) continue;
-    const walk = a => { if (typeof a[0] === 'number') { const p = map.project(a); x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y); } else a.forEach(walk); };
+    const walk = a => { if (typeof a[0] === 'number') { const p = map.project(a); x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y); verts.push([p.x, p.y]); } else a.forEach(walk); };
     walk(f.geometry.coordinates);
   }
   x0 = Math.max(x0, box.x0 + 2); y0 = Math.max(y0, 2); x1 = Math.min(x1, box.x0 + box.w - 2); y1 = Math.min(y1, box.h - 2);
@@ -491,12 +596,25 @@ function fineAnchor(code, hit, prop, box) {
     const d = (x - cx) ** 2 + (y - cy) ** 2; if (d >= bd) continue;
     if (insideRegion([x, y], hit, prop, code)) { best = [x, y]; bd = d; }
   }
-  return best;
+  if (best) return best;
+  // a small sliver (e.g. a corner of the view): probe next to the region's own vertices inside the view,
+  // then a finer grid, both capped so the update stays fast
+  const inb = verts.filter(p => p[0] > x0 && p[0] < x1 && p[1] > y0 && p[1] < y1);
+  const vstep = Math.max(1, Math.floor(inb.length / 150));
+  for (let i = 0; i < inb.length; i += vstep) for (const [dx, dy] of [[0, 0], [6, 0], [-6, 0], [0, 6], [0, -6]]) {
+    const q = [inb[i][0] + dx, inb[i][1] + dy];
+    if (q[0] > x0 && q[0] < x1 && q[1] > y0 && q[1] < y1 && insideRegion(q, hit, prop, code)) return q;
+  }
+  const f2 = Math.max(4, Math.sqrt((x1 - x0) * (y1 - y0) / 2500));
+  if (f2 < step) for (let x = x0 + f2 / 2; x < x1; x += f2) for (let y = y0 + f2 / 2; y < y1; y += f2) {
+    if (insideRegion([x, y], hit, prop, code)) return [x, y];
+  }
+  return null;
 }
 function updateFallbackLabels(box) {
   const src = map.getSource('fallback'); if (!src) return;
-  box = box || visibleBox();
-  const feats = [], stats = {};
+  box = box || visibleBox(); QC = new Map();
+  const feats = [], stats = {}, t0 = performance.now();
   for (const [lv, hit, prop, nm, sl] of fbLevels()) {
     // regions in view (any rendered part), plus grid samples for anchors and the 100% rule
     const inView = new Map();
@@ -504,43 +622,43 @@ function updateFallbackLabels(box) {
       const c = f.properties[prop]; if (c && !inView.has(c)) inView.set(c, { name: f.properties[nm], pts: [] });
     }
     let total = 0;
-    for (let i = 0; i < LABEL_SAMPLE; i++) for (let j = 0; j < Math.round(LABEL_SAMPLE * box.h / box.w); j++) {
-      const x = box.x0 + (i + 0.5) * box.w / LABEL_SAMPLE, y = (j + 0.5) * box.w / LABEL_SAMPLE; total++;
-      const f = map.queryRenderedFeatures([x, y], { layers: [hit] })[0];
-      if (f && inView.has(f.properties[prop])) inView.get(f.properties[prop]).pts.push([x, y]);
+    const step = box.w / LABEL_SAMPLE;
+    for (let i = 0; i < LABEL_SAMPLE; i++) for (let j = 0; j < Math.round(box.h / step); j++) {
+      const x = box.x0 + (i + 0.5) * step, y = (j + 0.5) * step; total++;
+      const c = hitAt(x, y, hit, prop);
+      if (c && inView.has(c)) inView.get(c).pts.push([x, y]);
     }
     const placed = labelsInView('l' + lv + '-label', box);
-    // tile label points of each region that are in view (inside their polygon by construction, tools/check_labels.py)
-    const tilePts = new Map();
-    for (const f of map.querySourceFeatures('lab', { sourceLayer: sl })) {
-      const c = f.properties.code; if (!inView.has(c) || f.geometry.type !== 'Point') continue;
-      const p = map.project(f.geometry.coordinates);
-      if (p.x < box.x0 + 8 || p.y < 8 || p.x > box.x0 + box.w - 8 || p.y > box.h - 8) continue;
-      const pr = (f.properties.rank === 0 ? 1e9 : 0) + (f.properties.r || 0);
-      const cur = tilePts.get(c); if (!cur || pr > cur.pr) tilePts.set(c, { pr, xy: [p.x, p.y], r: f.properties.r || 0 });
-    }
-    let missing = 0, full = 0, noAnchor = 0, fb = 0;
-    for (const [c, r] of inView) {
-      if (placed.has(c) || fbForced.has(lv + ':' + c)) continue;
+    const need = new Set([...inView.keys()].filter(c => !placed.has(c) && !fbForced.has(lv + ':' + c)));
+    const tp = tilePointsInView(sl, need, box);
+    let full = 0, noAnchor = 0, fb = 0, kept = 0; const miss = [];
+    for (const c of need) {
+      const r = inView.get(c);
       if (r.pts.length >= total && inView.size === 1) { full++; continue; }  // fills the whole view: no label
-      missing++;
-      let xy = tilePts.get(c) && tilePts.get(c).xy;
-      if (!xy && r.pts.length) {
+      const key = 'b|' + lv + ':' + c, font = FONT['b' + lv];
+      let cands = (tp.get(c) || []).slice(0, 3).map(o => o.xy);
+      if (r.pts.length) {
         const cx = r.pts.reduce((a, p) => a + p[0], 0) / r.pts.length, cy = r.pts.reduce((a, p) => a + p[1], 0) / r.pts.length;
-        xy = r.pts.slice().sort((a, b) => ((a[0] - cx) ** 2 + (a[1] - cy) ** 2) - ((b[0] - cx) ** 2 + (b[1] - cy) ** 2))[0];
+        cands = cands.concat(r.pts.slice().sort((a, b) => ((a[0] - cx) ** 2 + (a[1] - cy) ** 2) - ((b[0] - cx) ** 2 + (b[1] - cy) ** 2)).slice(0, 4));
       }
-      if (!xy) xy = fineAnchor(c, hit, prop, box);   // slivers / edge pieces: finer search inside the rendered part
-      if (!xy || !insideRegion(xy, hit, prop, c)) { noAnchor++; continue; }
-      const area = r.pts.length;
-      let ab = r.name; for (const [a, b] of ABBR) ab = ab.split(a).join(b);
-      const ext = r.pts.length ? (() => { let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9; for (const p of r.pts) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); } return [x1 - x0 + box.w / LABEL_SAMPLE, y1 - y0 + box.w / LABEL_SAMPLE]; })() : [30, 20];
-      const ll = map.unproject(xy);
-      feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [ll.lng, ll.lat] },
-        properties: { code: c, name: r.name, lvl: lv, must: 0, sk: -area, v0: ext[0] > 90 ? fitForced(ab, c, lv, ext[0] * 0.6, ext[1] * 0.6) : '' } });
+      if (!cands.length) { const xy = fineAnchor(c, hit, prop, box); if (xy) cands.push(xy); }
+      let ext = [30, 20];
+      if (r.pts.length) { let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9; for (const p of r.pts) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); } ext = [x1 - x0 + step, y1 - y0 + step]; }
+      const txts = ext[0] > 90 ? variantsFor(r.name, c, lv, ext[0] * 0.6, ext[1] * 0.6, font, 2).concat([{ t: '', pen: 0.25 }]) : [{ t: '', pen: 0 }];
+      const pl = place(key, c, hit, prop, font, cands, txts, ['center', 'top', 'bottom', 'right', 'left'], box, null, t0);
+      if (!pl || hitAt(pl.xy[0], pl.xy[1], hit, prop) !== c) { noAnchor++; miss.push(c + (pl ? '' : '/' + cands.length + '/' + r.pts.length)); continue; }
+      const prev = PLACE.get(key), ll = map.unproject(pl.xy), llA = pl.kept ? prev.ll : [ll.lng, ll.lat];
+      const must = pl.kept && prev.must ? 1 : 0;               // a code-only overlap label stays one while it is kept
+      PLACE.set(key, { ll: llA, t: pl.t, anc: pl.anc, must, gen: placeGen });
+      kept += pl.kept ? 1 : 0;
+      feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: llA },
+        properties: { code: c, name: r.name, lvl: lv, must, sk: -r.pts.length, v0: pl.t, anc: pl.anc, off: ANC_OFF[pl.anc] } });
       fb++;
     }
-    stats['L' + lv] = { inView: inView.size, tileLabeled: [...inView.keys()].filter(c => placed.has(c)).length, forced: [...inView.keys()].filter(c => fbForced.has(lv + ':' + c)).length, fallback: fb, fullView: full, noAnchor };
+    stats['L' + lv] = { inView: inView.size, tileLabeled: [...inView.keys()].filter(c => placed.has(c)).length, forced: [...inView.keys()].filter(c => fbForced.has(lv + ':' + c)).length, fallback: fb, keptFallback: kept, fullView: full, noAnchor, miss };
   }
+  // forget placements not used in this update (region left the view or got a tile/forced label)
+  for (const [k, v] of PLACE) if (v.gen !== placeGen) PLACE.delete(k);
   fbFeats = feats; src.setData({ type: 'FeatureCollection', features: feats });
   window.__labelStats = stats;
 }
@@ -552,7 +670,10 @@ map.on('idle', () => {
   const box = visibleBox();
   const ok = { 3: labelsInView('l3-fb', box), 4: labelsInView('l4-fb', box) };
   let must = 0;
-  for (const f of fbFeats) if (!ok[f.properties.lvl].has(f.properties.code)) { f.properties.must = 1; must++; }
+  for (const f of fbFeats) if (!f.properties.must && !ok[f.properties.lvl].has(f.properties.code)) {
+    f.properties.must = 1; must++;
+    const e = PLACE.get('b|' + f.properties.lvl + ':' + f.properties.code); if (e) e.must = 1;
+  }
   if (must) src.setData({ type: 'FeatureCollection', features: fbFeats });
   if (window.__labelStats) for (const k in window.__labelStats) window.__labelStats[k].mustOverlap = fbFeats.filter(f => 'L' + f.properties.lvl === k && f.properties.must === 1).length;
   window.__labelDone = (window.__labelDone || 0) + 1;
@@ -569,10 +690,9 @@ function vis(id, on) { if (map.getLayer(id)) map.setLayoutProperty(id, 'visibili
 function applyLayers() {
   const base = BASES.find(b => b.id === S.base) || BASES[0];
   for (const b of BASES) vis('base-' + b.id, b.id === base.id);
-  const has = base.has || {};
-  vis('majorroads', S.roads && !has.roads);
-  vis('city-label', S.cities && !has.cities);
-  vis('county-line', S.counties && !has.counties); vis('county-label', S.counties && !has.counties);
+  vis('majorroads', S.roads);
+  vis('city-label', S.cities);
+  vis('county-line', S.counties); vis('county-label', S.counties);
   syncOverlayToggles();
   vis('elev-relief', !!base.dem); vis('elev-shade', !!base.dem);
   $('elevLegend').hidden = !base.dem;
@@ -616,9 +736,8 @@ function syncOverlayToggles() {
   const base = BASES.find(b => b.id === S.base) || BASES[0], has = base.has || {};
   for (const [id, k] of [['tCities', 'cities'], ['tCounties', 'counties'], ['tRoads', 'roads']]) {
     const el = $(id); if (!el) continue;
-    const inc = !!has[k];
-    el.disabled = inc; el.checked = inc ? true : S[k];   // shown as on-but-greyed: the base map already draws it
-    el.closest('.row').classList.toggle('included', inc);
+    el.disabled = false; el.checked = S[k];              // available on every base (drawn above the ecoregions)
+    el.closest('.row').classList.remove('included');
   }
 }
 function syncDrawer() {
