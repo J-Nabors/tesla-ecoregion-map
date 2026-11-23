@@ -53,9 +53,10 @@
   <div id="results" hidden></div>
 </div>
 
-<!-- Right control stack -->
-<div id="rightstack">
+<!-- Top toolbar (top-right, beside the search box): layers, zoom, USA reset, locate -->
+<div id="rightstack" class="toolbar" role="toolbar" aria-label="Map controls">
   <button id="btnLayers" class="fab" aria-label="Layers"><svg viewBox="0 0 24 24"><path d="M12 3 2 8.5l10 5.5 10-5.5L12 3Zm-7.6 9.3L2 13.6 12 19l10-5.4-2.4-1.3L12 16.4l-7.6-4.1Z"/></svg><span>Layers</span></button>
+  <span class="sep" aria-hidden="true"></span>
   <button id="btnZoomIn" class="fab" aria-label="Zoom in"><svg viewBox="0 0 24 24"><path d="M11 4h2v7h7v2h-7v7h-2v-7H4v-2h7z"/></svg></button>
   <button id="btnZoomOut" class="fab" aria-label="Zoom out"><svg viewBox="0 0 24 24"><path d="M4 11h16v2H4z"/></svg></button>
   <button id="btnNorth" class="fab" aria-label="Reset view to USA"><svg viewBox="0 0 24 24"><path d="M3 5.5 9 3l6 2.5L21 3v15.5L15 21l-6-2.5L3 21V5.5Zm6-.3v11.6l6 2.5V7.7L9 5.2Z"/></svg><span>USA</span></button>
@@ -78,8 +79,8 @@
 <div id="elevLegend" class="card" hidden><div class="elt">Elevation</div><div id="elevBar"></div><div class="elticks"><span>0</span><span>4,000</span><span>8,000</span><span>12,000 ft</span></div></div>
 
 <!-- Layer drawer -->
-<aside id="drawer" class="sheet left" hidden aria-label="Layers">
-  <header><h2>Layers</h2><button class="btn close" data-close="drawer" aria-label="Close">✕</button></header>
+<aside id="drawer" class="sheet layers" hidden aria-label="Layers">
+  <header><h2>Layers</h2><button class="btn close" data-close="drawer" aria-label="Close layers"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
   <div class="sheetbody">
     <h3>Base map</h3>
     <div id="baseList" class="basegrid" role="radiogroup"></div>
@@ -87,17 +88,21 @@
     <div class="row toggle"><label><input type="checkbox" id="tL3" checked><span>Level III</span></label></div>
     <div class="row toggle"><label><input type="checkbox" id="tL4" checked><span>Level IV <small>(zoomed in)</small></span></label></div>
     <div class="row toggle"><label><input type="checkbox" id="tLab" checked><span>Region labels</span></label></div>
-    <details class="sec"><summary>Ecoregion opacity</summary>
+    <h3>Reference</h3>
+    <div class="row toggle"><label><input type="checkbox" id="tCities"><span>Cities &amp; towns <small class="inc">in this base map</small></span></label></div>
+    <div class="row toggle"><label><input type="checkbox" id="tCounties"><span>Counties <small class="inc">in this base map</small></span></label></div>
+    <div class="row toggle"><label><input type="checkbox" id="tRoads"><span>Major roads <small class="inc">in this base map</small></span></label></div>
+    <details class="sec"><summary><span>Ecoregion opacity</span><svg class="ic chev" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 6l6 6-6 6"/></svg></summary>
       <div class="row slider"><span>Level III</span><input type="range" id="oL3" min="0" max="100" value="30"><output id="oL3v">30%</output></div>
       <div class="row slider"><span>Level IV</span><input type="range" id="oL4" min="0" max="100" value="30"><output id="oL4v">30%</output></div>
     </details>
-    <details class="sec"><summary>Extra overlays</summary>
+    <details class="sec"><summary><span>Extra overlays</span><svg class="ic chev" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 6l6 6-6 6"/></svg></summary>
       <div class="row toggle"><label><input type="checkbox" id="tORM"><span>OpenRailwayMap railways</span></label></div>
       <div class="row toggle"><label><input type="checkbox" id="tHS"><span>Hillshade (terrain)</span></label></div>
       <div class="row toggle"><label><input type="checkbox" id="tNLCD"><span>Land cover (NLCD 2021)</span></label></div>
       <div class="row slider"><span>Land cover</span><input type="range" id="oNLCD" min="0" max="100" value="55"><output id="oNLCDv">55%</output></div>
     </details>
-    <details class="sec" id="secSize"><summary>Display size</summary>
+    <details class="sec" id="secSize"><summary><span>Display size</span><svg class="ic chev" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 6l6 6-6 6"/></svg></summary>
       <div class="row"><div class="seg" id="uiSize"><button data-s="auto">Auto</button><button data-s="xs">XS</button><button data-s="s">S</button><button data-s="m">M</button><button data-s="l">L</button><button data-s="xl">XL</button></div></div>
       <div class="dbg" id="uiDebug"></div>
       <p class="note">Ecoregion data: U.S. EPA Level III &amp; IV ecoregions. Descriptions from EPA ecoregion documents and state posters. <a href="#" id="aboutLink">About this map</a></p>
@@ -105,9 +110,12 @@
   </div>
 </aside>
 
+<!-- Edge tab: slides the info panel away and back (the region stays selected) -->
+<button id="panelTab" aria-label="Slide details away" aria-expanded="true"><span class="chev"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M15 6l-6 6 6 6"/></svg></span><span class="tc"></span></button>
+
 <!-- Info panel -->
-<aside id="panel" class="sheet right" hidden aria-label="Ecoregion details">
-  <header><div id="panelTitle"></div><button class="btn close" id="panelCollapse" aria-label="Collapse panel" aria-expanded="true">▾</button><button class="btn close" data-close="panel" aria-label="Close">✕</button></header>
+<aside id="panel" class="sheet info" hidden aria-label="Ecoregion details">
+  <header><div id="panelTitle"></div><button class="btn close" id="panelCollapse" aria-label="Collapse panel" aria-expanded="true"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 9l6 6 6-6"/></svg></button><button class="btn close" data-close="panel" aria-label="Close region details"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
   <div id="panelBody" class="sheetbody"></div>
 </aside>
 

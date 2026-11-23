@@ -19,7 +19,7 @@ mapshaper us_eco_l4/us_eco_l4_no_st.shp -proj wgs84 -each 'c4=US_L4CODE,n4=US_L4
 mapshaper us_eco_l3/us_eco_l3.shp -proj wgs84 -each 'c3=US_L3CODE,n3=US_L3NAME' -filter-fields c3,n3 -o gj/l3_conus.json format=geojson precision=0.00001
 mapshaper ak_eco_l3/ak_eco_l3.shp -proj wgs84 -each 'c3=US_L3CODE,n3=US_L3NAME' -filter-fields c3,n3 -o gj/l3_ak.json format=geojson precision=0.00001
 python3 -c "import json;a=json.load(open('gj/l3_conus.json'));b=json.load(open('gj/l3_ak.json'));a['features']+=b['features'];json.dump(a,open('gj/l3_all.json','w'))"
-cd $BUILD && cp $SITE/tools/*.py . && python3 adjacency.py && python3 labels.py && python3 descriptions.py && python3 build_data.py
+cd $BUILD && cp $SITE/tools/*.py . && python3 adjacency.py && python3 labels.py && python3 check_labels.py && python3 label_layouts.py && python3 check_labels.py && python3 descriptions.py && python3 build_data.py
 cd $SRC/gj && tippecanoe -o $SITE/tiles/ecoregions.pmtiles --force -Z0 -z11 \
   -L'{"file":"l3_all.json","layer":"l3"}' -L'{"file":"l4.json","layer":"l4","minzoom":4}' \
   -L"{\"file\":\"$BUILD/labels_l3.json\",\"layer\":\"l3lab\"}" -L"{\"file\":\"$BUILD/labels_l4.json\",\"layer\":\"l4lab\",\"minzoom\":5}" \
@@ -28,3 +28,9 @@ cd $SRC/gj && tippecanoe -o $SITE/tiles/ecoregions.pmtiles --force -Z0 -z11 \
 cd $BUILD && tippecanoe -o $SITE/tiles/labels.pmtiles --force -Z0 -z11 \
   -L'{"file":"labels_l3.json","layer":"l3lab"}' -L'{"file":"labels_l4.json","layer":"l4lab","minzoom":5}' \
   -r1 --no-feature-limit --no-tile-size-limit
+# Counties overlay (U.S. Census cartographic boundary file, 1:5M, states + DC only).
+cd $SRC/counties && mapshaper cb_2023_us_county_5m.shp -proj wgs84 -filter 'Number(STATEFP) < 60' \
+  -each 'name=NAME,st=STUSPS' -filter-fields name,st -o counties.json format=geojson precision=0.0001
+mapshaper counties.json -points inner -o county_pts.json format=geojson
+tippecanoe -o $SITE/tiles/counties.pmtiles --force -Z3 -z10 -L'{"file":"counties.json","layer":"county"}' \
+  -L'{"file":"county_pts.json","layer":"countylab","minzoom":7}' --no-tile-size-limit -r1

@@ -56,7 +56,9 @@ for fn, key, name, lvl, rz in [('l4.json', 'c4', 'n4', 4, 9), ('l3_conus.json', 
             r_deg = q.exterior.distance(pt)
             for h in q.interiors: r_deg = min(r_deg, h.distance(pt))
             r_m = r_deg * 111320
-            lon, lat = pt.x / k, pt.y
+            lon, lat = round(pt.x / k, 5), round(pt.y, 5)
+            if not p.contains(Point(lon, lat)):        # never a point outside its own part: point-on-surface fallback
+                rp = p.representative_point(); lon, lat = rp.x, rp.y
             res.append((r_m, lon, lat, props, p))
         res.sort(key=lambda t: -t[0])
         for i, (r_m, lon, lat, props, p) in enumerate(res):

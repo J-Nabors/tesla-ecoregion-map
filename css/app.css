@@ -7,6 +7,7 @@
   --accent:#ffd23f; --blue:#3d9bff; --red:#ff3b3b;
   --tap:2.6rem; --radius:.6rem; --gap:.5rem;
   --panelW:min(30rem,28.8vw);
+  --tbW:calc(var(--tap) * 5 + 2.4rem); /* top toolbar width */
 }
 html{font-size:calc(16px * var(--ui-scale))}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -33,10 +34,11 @@ svg{width:1.3rem;height:1.3rem;fill:currentColor}
 .res:active{background:var(--card2)}
 
 /* right stack */
-#rightstack{position:absolute;top:var(--gap);right:var(--gap);display:flex;flex-direction:column;gap:.35rem;z-index:5}
+#rightstack{position:absolute;top:var(--gap);right:var(--gap);display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;gap:.3rem;z-index:5;padding:.2rem;border-radius:.75rem;background:rgba(11,15,20,.35)}
 .fab{width:var(--tap);height:var(--tap);border-radius:.55rem;border:1px solid var(--line);background:var(--card);box-shadow:0 3px 12px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
 .fab span{display:none}
-.fab.locate{background:#0f2a4a;border-color:var(--blue);margin-top:.3rem}
+.fab.locate{background:#0f2a4a;border-color:var(--blue);margin-left:.25rem}
+.toolbar .sep{width:1px;align-self:stretch;margin:.2rem .1rem;background:var(--line)}
 .fab.locate.active{background:var(--blue);color:#fff}
 .fab.locate.follow{background:#fff;color:#0b61c9;border-color:#fff}
 .fab.locate.busy svg{animation:spin 1.2s linear infinite}
@@ -49,16 +51,14 @@ svg{width:1.3rem;height:1.3rem;fill:currentColor}
 .pill[aria-pressed=true]{border-color:var(--accent);background:#3a3008}
 .pill[aria-pressed=true] .dot{background:var(--accent)}
 .pill[aria-pressed=true] b{color:var(--accent)}
-.where{text-align:left;padding:.25rem .7rem;min-height:var(--tap);cursor:pointer;max-width:20rem;border-color:var(--red)}
+.where{text-align:left;padding:.25rem .7rem;min-height:var(--tap);cursor:pointer;max-width:20rem;border-color:var(--blue)}
 .where .wl{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
 .where .wv{font-size:1rem;font-weight:700;line-height:1.2}
 .where .ws{font-size:.82rem;color:var(--muted)}
 
 /* sheets: both are floating cards */
 .sheet{position:absolute;z-index:10;background:var(--card);display:flex;flex-direction:column;box-shadow:0 0 24px rgba(0,0,0,.7);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
-.sheet.right{right:var(--gap);top:var(--gap);bottom:var(--gap);width:var(--panelW)}
-.sheet.right.collapsed{bottom:auto}
-.sheet.right.collapsed .sheetbody{display:none}
+.sheet.info{left:var(--gap);top:var(--gap);bottom:var(--gap);width:var(--panelW)}
 .sheet header{display:flex;align-items:center;gap:.3rem;padding:.25rem .25rem .25rem .7rem;border-bottom:1px solid var(--line);flex:none}
 .sheet header h2{flex:1;margin:0;font-size:1.1rem}
 #panelTitle{flex:1;min-width:0}
@@ -70,7 +70,7 @@ svg{width:1.3rem;height:1.3rem;fill:currentColor}
    equals 15px at the default scale (same as v2) and scales with --ui-scale like everything else. */
 #drawer{--u:calc(1rem * var(--drawer-k,1));font-size:var(--u)}
 html[data-device=tesla]{--drawer-k:1.171875}
-#drawer.sheet.left{left:calc(var(--u) * .75);top:calc(var(--u) * .75);width:calc(var(--u) * 21);max-height:calc(100% - calc(var(--u) * 4.5));border:1px solid var(--line);border-radius:calc(var(--u) * .75)}
+#drawer.sheet.layers{right:var(--gap);left:auto;top:calc(var(--gap) * 2 + var(--tap) + .4rem);width:calc(var(--u) * 21);max-height:calc(100% - var(--gap) * 3 - var(--tap) - 2.4rem);border:1px solid var(--line);border-radius:calc(var(--u) * .75)}
 #drawer .sheetbody{padding:calc(var(--u) * .2) calc(var(--u) * .6) calc(var(--u) * .7)}
 #drawer h3{margin:calc(var(--u) * .55) 0 calc(var(--u) * .3)}
 #drawer .basegrid{display:grid;grid-template-columns:1fr 1fr;gap:calc(var(--u) * .3)}
@@ -79,8 +79,11 @@ html[data-device=tesla]{--drawer-k:1.171875}
 #drawer details.sec{border-top:1px solid var(--line);margin-top:calc(var(--u) * .4)}
 #drawer details.sec summary{list-style:none;display:flex;align-items:center;min-height:calc(var(--u) * 2.75);cursor:pointer;font-size:calc(var(--u) * .75);text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:700}
 #drawer details.sec summary::-webkit-details-marker{display:none}
-#drawer details.sec summary::after{content:"▸";margin-left:auto;font-size:calc(var(--u) * 1);transition:.15s}
-#drawer details.sec[open] summary::after{transform:rotate(90deg)}
+summary{list-style:none}
+summary::-webkit-details-marker{display:none}
+summary::marker{content:"";display:none}
+#drawer details.sec summary .chev{margin-left:auto;width:calc(var(--u) * 1);height:calc(var(--u) * 1);transition:transform .15s}
+#drawer details.sec[open] summary .chev{transform:rotate(90deg)}
 #drawer .row{display:flex;align-items:center;gap:calc(var(--u) * .5);min-height:calc(var(--u) * 2.75)}
 #drawer .row.toggle label{display:flex;align-items:center;gap:calc(var(--u) * .6);width:100%;min-height:calc(var(--u) * 2.75);cursor:pointer;font-size:calc(var(--u) * .92)}
 #drawer .row.toggle input{appearance:none;-webkit-appearance:none;flex:none;width:calc(var(--u) * 2.6);height:calc(var(--u) * 1.5);border-radius:calc(var(--u) * .75);background:#3a4553;position:relative;transition:.15s;margin:0}
@@ -115,10 +118,6 @@ a{color:#8cc4ff}
 .hier .h{display:flex;gap:.4rem;align-items:center;font-size:.92rem}
 .hier .h .k{flex:none;width:4.3rem;color:var(--muted);font-size:.72rem;text-transform:uppercase}
 .linkbtn{background:var(--card2);border:1px solid var(--line);border-radius:.4rem;min-height:2.1rem;padding:.15rem .5rem;text-align:left;cursor:pointer;font-weight:700;font-size:.92rem}
-.speakrow{display:flex;flex-wrap:wrap;gap:.3rem;margin:.15rem 0 .35rem}
-.speak{display:inline-flex;align-items:center;gap:.3rem;min-height:2.2rem;padding:0 .7rem;border-radius:1.1rem;border:1px solid var(--blue);background:#10294a;cursor:pointer;font-weight:700;font-size:.9rem}
-.speak svg{width:1rem;height:1rem}
-.speak.on{background:var(--red);border-color:var(--red);color:#fff}
 .desc{font-size:1rem;line-height:1.45;color:#e8eef4}
 .src{font-size:.8rem;color:var(--muted);margin-top:.3rem}
 .missing{background:#2a1d10;border:1px solid #7a5520;border-radius:.4rem;padding:.5rem;font-size:.92rem}
@@ -148,8 +147,10 @@ a{color:#8cc4ff}
 .maplibregl-ctrl-scale{background:rgba(11,15,20,.75);color:#fff;border-color:#fff;font-size:10px}
 .maplibregl-ctrl-bottom-left{left:auto;right:0}
 [hidden]{display:none!important}
-body.panel-open #rightstack{right:calc(var(--panelW) + var(--gap) * 2)}
-body.drawer-open #searchbox{display:none}
+/* info panel on the left: search box and bottom bar move right of it; the toolbar stays top-right */
+html:not([data-device=phone]) body.panel-open:not(.panel-away) #searchbox{left:calc(var(--panelW) + var(--gap) * 2);width:max(8rem,min(19rem,calc(100vw - var(--panelW) - var(--tbW) - var(--gap) * 5)))}
+html:not([data-device=phone]) body.panel-open:not(.panel-away) #bottombar{left:calc(var(--panelW) + var(--gap) * 2)}
+#searchbox,#bottombar{transition:left .2s ease}
 @media (max-width:1100px){:root{--panelW:min(30rem,36vw)}}
 .dbg{white-space:pre-wrap;word-break:break-word}
 
@@ -159,13 +160,14 @@ body.drawer-open #searchbox{display:none}
 html[data-device=tablet]{--tap:2.9rem;--panelW:min(30rem,40vw)}
 html[data-device=desktop]{--panelW:min(30rem,28.8vw)}
 html[data-device=phone]{--tap:2.75rem;--panelW:100vw}
-html[data-device=phone] #searchbox{width:calc(100vw - var(--tap) - var(--gap) * 3)}
-html[data-device=phone] #drawer.sheet.left{width:min(calc(var(--u) * 21),calc(100vw - 1rem));max-height:calc(100% - 6rem)}
-html[data-device=phone] .sheet.right{left:0;right:0;top:auto;bottom:0;width:auto;height:min(58vh,36rem);border-radius:1rem 1rem 0 0;border-bottom:0}
-html[data-device=phone] .sheet.right.collapsed{height:auto}
-html[data-device=phone] .sheet.right header{position:relative;padding-top:.6rem}
-html[data-device=phone] .sheet.right header::before{content:"";position:absolute;top:.25rem;left:50%;width:2.5rem;height:.25rem;margin-left:-1.25rem;border-radius:.2rem;background:#4a5a6c}
-html[data-device=phone] body.panel-open #rightstack{right:var(--gap)}
+html[data-device=phone] #searchbox{width:calc(100vw - var(--gap) * 2);z-index:6}
+html[data-device=phone] #drawer.sheet.layers{width:min(calc(var(--u) * 21),calc(100vw - 1rem));max-height:calc(100% - 6rem)}
+html[data-device=phone] .sheet.info{left:0;right:0;top:auto;bottom:0;width:auto;height:min(58vh,36rem);border-radius:1rem 1rem 0 0;border-bottom:0}
+html[data-device=phone] .sheet.info header{position:relative;padding-top:.6rem}
+html[data-device=phone] .sheet.info header::before{content:"";position:absolute;top:.25rem;left:50%;width:2.5rem;height:.25rem;margin-left:-1.25rem;border-radius:.2rem;background:#4a5a6c}
+html[data-device=phone] #rightstack,html[data-device=phone] body.panel-open #rightstack{right:var(--gap);top:calc(var(--gap) * 2 + var(--tap) + .5rem);flex-wrap:wrap;justify-content:flex-end;max-width:calc(100vw - var(--gap) * 2)}
+/* phone: with the layers panel open the search box is hidden, so the toolbar moves up and the panel sits below it */
+html[data-device=phone] #drawer.sheet.layers{top:calc(var(--tap) * 2 + var(--gap) * 3 + 1.1rem);right:var(--gap);max-height:calc(100% - var(--tap) * 2 - 5rem)}
 html[data-device=phone] body.panel-open #bottombar{display:none}
 html[data-device=phone] #bottombar{bottom:2.2rem}
 html[data-device=phone] .where{max-width:calc(100vw - 11rem)}
@@ -180,5 +182,39 @@ html[data-device=phone] #toast{max-width:90vw}
 #elevLegend .elticks{position:relative;height:1.1rem;margin:0 .4rem}
 #elevLegend .elticks span{position:absolute;top:.1rem;transform:translateX(-50%);white-space:nowrap;color:#dfe7ef}
 #elevLegend .elticks span:last-child{transform:translateX(-70%)}
-body.panel-open #elevLegend{right:calc(var(--panelW) + var(--gap) * 2)}
 html[data-device=phone] body.panel-open #elevLegend{display:none}
+
+/* reference overlays already drawn by the current base map */
+#drawer .row.toggle small.inc{display:none;margin-left:.3em;font-style:italic}
+#drawer .row.included small.inc{display:inline}
+#drawer .row.included label{opacity:.5;cursor:not-allowed}
+
+/* info panel slide-away + edge tab */
+.sheet.info{transition:transform .2s ease}
+#rightstack,#elevLegend{transition:right .2s ease}
+body.panel-away .sheet.info{transform:translateX(calc(-100% - var(--gap) - 4px))}
+#panelTab{display:none;position:absolute;z-index:11;top:50%;left:calc(var(--panelW) + var(--gap));width:1.875rem;height:3.75rem;margin-top:-1.875rem;padding:0;
+  flex-direction:column;align-items:center;justify-content:center;gap:.15rem;border:1px solid var(--line);border-left:0;border-radius:0 .6rem .6rem 0;
+  background:var(--card);color:var(--text);box-shadow:3px 0 10px rgba(0,0,0,.45);cursor:pointer;transition:transform .2s ease;touch-action:none}
+#panelTab .chev{font-size:1.2rem;line-height:1;font-weight:800;transition:transform .2s ease}
+#panelTab .tc{display:none;writing-mode:vertical-rl;transform:rotate(180deg);font-size:.72rem;font-weight:800;color:var(--accent);max-height:2.4rem;overflow:hidden}
+body.panel-open #panelTab{display:flex}
+body.panel-away #panelTab{transform:translateX(calc(-1 * (var(--panelW) + var(--gap))));height:5rem;margin-top:-2.5rem}
+body.panel-away #panelTab .chev{transform:rotate(180deg)}
+body.panel-away #panelTab .tc{display:block}
+html[data-device=phone] #panelTab{display:none!important}
+/* phone bottom sheet: peek / half / full */
+html[data-device=phone] .sheet.info{transition:height .2s ease}
+html[data-device=phone] .sheet.info.dragging{transition:none}
+html[data-device=phone] .sheet.info[data-sheet=peek]{height:4rem}
+html[data-device=phone] .sheet.info[data-sheet=peek] .sheetbody{display:none}
+html[data-device=phone] .sheet.info[data-sheet=full]{height:calc(100% - 4.5rem)}
+html[data-device=phone] .sheet.info header{touch-action:none;cursor:grab}
+/* stroke icons (inline SVG, currentColor) */
+svg.ic{width:1.1em;height:1.1em;fill:none;stroke:currentColor;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round;vertical-align:-.15em}
+.close svg.ic{width:55%;height:55%}
+#panelTab .chev svg.ic{width:1.1rem;height:1.1rem;display:block}
+.linkbtn svg.ic{width:.9em;height:.9em}
+.chip svg.ic{width:1em;height:1em;stroke-width:2}
+/* top toolbar: narrow screens with the info panel open drop the toolbar below the search box row */
+#rightstack{transition:right .2s ease,top .2s ease}
