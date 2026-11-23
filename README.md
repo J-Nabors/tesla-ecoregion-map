@@ -6,14 +6,15 @@ A touch-first web map of the U.S. EPA **Level III and Level IV ecoregions**, bui
 - **Ecoregion overlays:** EPA Level III (conterminous U.S. and Alaska) and Level IV (conterminous U.S.). Each level has its own on/off switch, opacity slider and labels (code and name) that appear at sensible zooms. Level IV takes over from Level III as you zoom in.
 - **Base maps:** Satellite (Esri World Imagery), Satellite with labels, OpenStreetMap, OpenRailwayMap (railways over a grey OSM), Esri World Topo, OpenTopoMap, USGS Topo (The National Map), Esri Shaded Relief and Esri Dark Gray.
 - **Extra overlays:** OpenRailwayMap railways (on any base map), Esri hillshade and NLCD 2021 land cover (MRLC WMS, lower 48).
-- **Locate button:** a big button that shows a position dot and accuracy circle. It has a follow mode (dragging the map stops following) and shows a clear message when location permission is denied or the page isn't on https. A "You are in" card shows your current Level IV and Level III ecoregion. It comes from the vector tiles, with a fallback to EPA's ArcGIS service. Tap the card to open full details.
+- **Locate button:** shows a red position dot and accuracy circle. It has a follow mode (dragging the map stops following) and shows a clear message when location permission is denied or the page isn't on https. A "You are in" card shows your current Level IV and Level III ecoregion. It comes from the vector tiles, with a fallback to EPA's ArcGIS service. Tap the card to open full details.
 - **Tap info toggle:** off by default, so panning never pops up anything. When it is on, tapping a region highlights it and opens a side panel with:
   - the code and name, plus the Level III parent and the North American Level II and Level I classes
   - EPA's official description of the region
   - **how it differs from each neighbor**: verbatim EPA sentences that compare the two regions, plus keyword contrasts (landforms, geology, soils, soil temperature and moisture, vegetation, land use, and elevation or precipitation ranges when both descriptions state them). Tap a neighbor to fly to it.
 - **Search:** ecoregion names and codes are searched instantly on the device. Places are searched through OSM Nominatim when you press Go.
 - **URL hash:** the address remembers the view, base map, layers, opacity, tap mode and the selected region, so you can bookmark it.
-- **Touch-first UI:** 64–110 px buttons, large text, a high-contrast dark theme, no hover-only features, pinch zoom and pan, and rotation and pitch disabled.
+- **Read aloud:** the info panel can speak the region's name and EPA description, or its neighbor differences, using the browser's built-in speech (Web Speech API). The button turns into Stop while speaking. Speech stops when the panel closes or another region is picked, and the buttons are hidden if the browser has no speech support.
+- **Compact touch UI:** about 45 px controls, a floating layers card (base-map grid, collapsible opacity, overlay and display-size sections), a high-contrast dark theme, no hover-only features, pinch zoom and pan, and rotation and pitch disabled. A **Display size** setting (Small, Medium, Large) scales the whole interface; it is saved on the device and in the URL (`ui=13|15|17`).
 
 ## Data sources
 | What | Source |

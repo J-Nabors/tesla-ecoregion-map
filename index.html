@@ -44,22 +44,28 @@
 
 <!-- Layer drawer -->
 <aside id="drawer" class="sheet left" hidden aria-label="Layers">
-  <header><h2>Map layers</h2><button class="btn close" data-close="drawer" aria-label="Close">✕</button></header>
+  <header><h2>Layers</h2><button class="btn close" data-close="drawer" aria-label="Close">✕</button></header>
   <div class="sheetbody">
     <h3>Base map</h3>
-    <div id="baseList" class="radiolist"></div>
+    <div id="baseList" class="basegrid" role="radiogroup"></div>
     <h3>Ecoregions (EPA)</h3>
     <div class="row toggle"><label><input type="checkbox" id="tL3" checked><span>Level III</span></label></div>
-    <div class="row slider"><span>Opacity</span><input type="range" id="oL3" min="0" max="100" value="30"><output id="oL3v">30%</output></div>
-    <div class="row toggle"><label><input type="checkbox" id="tL4" checked><span>Level IV <small>(zoom in past state level)</small></span></label></div>
-    <div class="row slider"><span>Opacity</span><input type="range" id="oL4" min="0" max="100" value="30"><output id="oL4v">30%</output></div>
+    <div class="row toggle"><label><input type="checkbox" id="tL4" checked><span>Level IV <small>(zoomed in)</small></span></label></div>
     <div class="row toggle"><label><input type="checkbox" id="tLab" checked><span>Region labels</span></label></div>
-    <h3>Extra overlays</h3>
-    <div class="row toggle"><label><input type="checkbox" id="tORM"><span>OpenRailwayMap railways</span></label></div>
-    <div class="row toggle"><label><input type="checkbox" id="tHS"><span>Hillshade (terrain relief)</span></label></div>
-    <div class="row toggle"><label><input type="checkbox" id="tNLCD"><span>Land cover (NLCD 2021, lower 48)</span></label></div>
-    <div class="row slider"><span>Land cover opacity</span><input type="range" id="oNLCD" min="0" max="100" value="55"><output id="oNLCDv">55%</output></div>
-    <p class="note">Ecoregion data: U.S. EPA Level III &amp; IV ecoregions (CONUS Level IV, 2013; Alaska Level III). Descriptions come from EPA ecoregion descriptions and state posters. <a href="#" id="aboutLink">About this map</a></p>
+    <details class="sec"><summary>Ecoregion opacity</summary>
+      <div class="row slider"><span>Level III</span><input type="range" id="oL3" min="0" max="100" value="30"><output id="oL3v">30%</output></div>
+      <div class="row slider"><span>Level IV</span><input type="range" id="oL4" min="0" max="100" value="30"><output id="oL4v">30%</output></div>
+    </details>
+    <details class="sec"><summary>Extra overlays</summary>
+      <div class="row toggle"><label><input type="checkbox" id="tORM"><span>OpenRailwayMap railways</span></label></div>
+      <div class="row toggle"><label><input type="checkbox" id="tHS"><span>Hillshade (terrain)</span></label></div>
+      <div class="row toggle"><label><input type="checkbox" id="tNLCD"><span>Land cover (NLCD 2021)</span></label></div>
+      <div class="row slider"><span>Land cover</span><input type="range" id="oNLCD" min="0" max="100" value="55"><output id="oNLCDv">55%</output></div>
+    </details>
+    <details class="sec"><summary>Display size</summary>
+      <div class="row"><div class="seg" id="uiSize"><button data-s="13">Small</button><button data-s="15">Medium</button><button data-s="17">Large</button></div></div>
+      <p class="note">Ecoregion data: U.S. EPA Level III &amp; IV ecoregions. Descriptions from EPA ecoregion documents and state posters. <a href="#" id="aboutLink">About this map</a></p>
+    </details>
   </div>
 </aside>
 

@@ -27,8 +27,9 @@ const BASES = [
 ];
 
 /* ---------- State (persisted in URL hash) ---------- */
-const S = { base: 'sat', l3: true, l4: true, lab: true, o3: 30, o4: 30, orm: false, hs: false, nlcd: false, onlcd: 55, tap: false, sel: null };
+const S = { base: 'sat', l3: true, l4: true, lab: true, o3: 30, o4: 30, orm: false, hs: false, nlcd: false, onlcd: 55, tap: false, sel: null, ui: +(localStorage.getItem('ecoUi') || 15) };
 let initialView = null;
+function applyUiSize() { document.documentElement.style.fontSize = S.ui + 'px'; try { localStorage.setItem('ecoUi', S.ui); } catch (e) {} }
 (function readHash() {
   const h = location.hash.replace(/^#/, ''); if (!h) return;
   const p = new URLSearchParams(h);
@@ -38,6 +39,7 @@ let initialView = null;
   for (const k of ['l3', 'l4', 'lab', 'orm', 'hs', 'nlcd', 'tap']) if (p.has(k)) S[k] = p.get(k) === '1';
   for (const k of ['o3', 'o4', 'onlcd']) if (p.has(k)) S[k] = Math.max(0, Math.min(100, +p.get(k) || 0));
   if (p.has('sel')) S.sel = p.get('sel');
+  if ([13, 15, 17].includes(+p.get('ui'))) S.ui = +p.get('ui');
 })();
 function writeHash() {
   if (!map) return;
@@ -48,6 +50,7 @@ function writeHash() {
   for (const k of ['l3', 'l4', 'lab', 'orm', 'hs', 'nlcd', 'tap']) p.set(k, S[k] ? '1' : '0');
   for (const k of ['o3', 'o4', 'onlcd']) p.set(k, S[k]);
   if (S.sel) p.set('sel', S.sel);
+  p.set('ui', S.ui);
   history.replaceState(null, '', '#' + p.toString().replace(/%2F/g, '/').replace(/%3A/g, ':'));
 }
 
@@ -132,15 +135,16 @@ function buildStyle() {
       layout: { 'text-field': ['concat', ['get', 'code'], '  ', ['get', 'name']], 'text-font': ['Open Sans Semibold'],
         'text-size': ['interpolate', ['linear'], ['zoom'], 3, 12, 5, 16, 8, 21], 'text-max-width': 8, 'symbol-sort-key': ['-', 0, ['get', 'area']], 'text-padding': 4 },
       paint: { 'text-color': '#ffffff', 'text-halo-color': '#000', 'text-halo-width': 2.2 } },
-    { id: 'me-acc', type: 'fill', source: 'me', filter: ['==', '$type', 'Polygon'], paint: { 'fill-color': '#3d9bff', 'fill-opacity': 0.18 } },
-    { id: 'me-acc-line', type: 'line', source: 'me', filter: ['==', '$type', 'Polygon'], paint: { 'line-color': '#3d9bff', 'line-width': 2 } },
-    { id: 'me-halo', type: 'circle', source: 'me', filter: ['==', '$type', 'Point'], paint: { 'circle-radius': 22, 'circle-color': '#3d9bff', 'circle-opacity': 0.25 } },
-    { id: 'me-dot', type: 'circle', source: 'me', filter: ['==', '$type', 'Point'], paint: { 'circle-radius': 11, 'circle-color': '#1a7bff', 'circle-stroke-color': '#fff', 'circle-stroke-width': 4 } },
+    { id: 'me-acc', type: 'fill', source: 'me', filter: ['==', '$type', 'Polygon'], paint: { 'fill-color': '#ff3b3b', 'fill-opacity': 0.15 } },
+    { id: 'me-acc-line', type: 'line', source: 'me', filter: ['==', '$type', 'Polygon'], paint: { 'line-color': '#ff3b3b', 'line-width': 2 } },
+    { id: 'me-halo', type: 'circle', source: 'me', filter: ['==', '$type', 'Point'], paint: { 'circle-radius': 20, 'circle-color': '#ff3b3b', 'circle-opacity': 0.3 } },
+    { id: 'me-dot', type: 'circle', source: 'me', filter: ['==', '$type', 'Point'], paint: { 'circle-radius': 10, 'circle-color': '#ff1f1f', 'circle-stroke-color': '#fff', 'circle-stroke-width': 3 } },
   );
   sources.me = { type: 'geojson', data: { type: 'FeatureCollection', features: [] } };
   return { version: 8, glyphs: BASE_URL + 'vendor/fonts/{fontstack}/{range}.pbf', sources, layers };
 }
 
+applyUiSize();
 const USA = { center: [-98.5, 39.5], zoom: 3.6 };
 const map = new maplibregl.Map({
   container: 'map', style: buildStyle(), center: (initialView || USA).center, zoom: (initialView || USA).zoom,
@@ -153,6 +157,11 @@ map.keyboard.disableRotation();
 map.addControl(new maplibregl.AttributionControl({ compact: false }), 'bottom-right');
 map.addControl(new maplibregl.ScaleControl({ unit: 'imperial', maxWidth: 160 }), 'bottom-right');
 
+map.on('load', () => {
+  if (navigator.permissions && navigator.permissions.query) {
+    navigator.permissions.query({ name: 'geolocation' }).then(r => { if (r.state === 'granted' && watchId == null) startLocate(); }).catch(() => {});
+  }
+});
 map.on('load', async () => {
   await dataReady;
   // color expressions built from the index
@@ -197,7 +206,7 @@ function buildDrawer() {
   for (const b of BASES) {
     const el = document.createElement('button');
     el.setAttribute('role', 'radio'); el.dataset.id = b.id;
-    el.innerHTML = `<span class="r"></span><span><b>${b.name}</b><small>${b.sub}</small></span>`;
+    el.textContent = b.name; el.title = b.sub;
     el.onclick = () => { S.base = b.id; applyLayers(); syncDrawer(); };
     list.appendChild(el);
   }
@@ -205,23 +214,38 @@ function buildDrawer() {
   bindT('tL3', 'l3'); bindT('tL4', 'l4'); bindT('tLab', 'lab'); bindT('tORM', 'orm'); bindT('tHS', 'hs'); bindT('tNLCD', 'nlcd');
   const bindO = (id, key) => { $(id).oninput = () => { S[key] = +$(id).value; $(id + 'v').textContent = S[key] + '%'; applyLayers(); }; };
   bindO('oL3', 'o3'); bindO('oL4', 'o4'); bindO('oNLCD', 'onlcd');
+  $('uiSize').querySelectorAll('button').forEach(b => b.onclick = () => { S.ui = +b.dataset.s; applyUiSize(); syncDrawer(); writeHash(); setTimeout(() => map.resize(), 50); });
   syncDrawer();
 }
 function syncDrawer() {
   for (const el of $('baseList').children) el.setAttribute('aria-checked', el.dataset.id === S.base);
+  $('uiSize').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', +b.dataset.s === S.ui));
   $('tL3').checked = S.l3; $('tL4').checked = S.l4; $('tLab').checked = S.lab; $('tORM').checked = S.orm; $('tHS').checked = S.hs; $('tNLCD').checked = S.nlcd;
   for (const [id, k] of [['oL3', 'o3'], ['oL4', 'o4'], ['oNLCD', 'onlcd']]) { $(id).value = S[k]; $(id + 'v').textContent = S[k] + '%'; }
 }
 $('btnLayers').onclick = () => { $('drawer').hidden = !$('drawer').hidden; sheetState(); };
 document.querySelectorAll('[data-close]').forEach(b => b.onclick = () => {
   $(b.dataset.close).hidden = true; sheetState();
-  if (b.dataset.close === 'panel') { clearSelection(); }
+  if (b.dataset.close === 'panel') { stopSpeech(); clearSelection(); }
 });
 $('aboutLink').onclick = (e) => { e.preventDefault(); showModal(ABOUT); };
 
 /* ---------- Zoom / reset ---------- */
-$('btnZoomIn').onclick = () => map.zoomIn({ duration: 250 });
-$('btnZoomOut').onclick = () => map.zoomOut({ duration: 250 });
+/* Zoom buttons: step to the next whole zoom level from the pending target, so repeated taps
+   accumulate, and keep the location centered while following. */
+let zoomTarget = null;
+function zoomStep(d) {
+  const base = zoomTarget != null ? zoomTarget : map.getZoom();
+  let z = d > 0 ? Math.floor(base + 1e-6) + 1 : Math.ceil(base - 1e-6) - 1;
+  z = Math.max(map.getMinZoom(), Math.min(map.getMaxZoom(), z));
+  const opts = { zoom: z, duration: 300 };
+  if (following && lastPos) opts.center = [lastPos.lng, lastPos.lat];
+  map.easeTo(opts);
+  zoomTarget = z; // set after easeTo: stopping the previous animation fires zoomend synchronously
+}
+map.on('zoomend', () => { zoomTarget = null; });
+$('btnZoomIn').onclick = () => zoomStep(1);
+$('btnZoomOut').onclick = () => zoomStep(-1);
 $('btnNorth').onclick = () => { stopFollow(); map.flyTo({ ...USA, bearing: 0, duration: 900 }); };
 
 /* ---------- Tap-for-info toggle ---------- */
@@ -264,15 +288,16 @@ async function selectKey(key, { fly = true, open = true } = {}) {
     map.setFilter('sel3-fill', ['==', 'c3', code]); map.setFilter('sel3-line', ['==', 'c3', code]);
     map.setFilter('sel-fill', ['==', 'c4', '__none__']); map.setFilter('sel-line', ['==', 'c4', '__none__']);
   }
+  stopSpeech();
+  if (open) renderPanel(e);
   if (fly) {
     const c = CENTERS[key];
     if (c) {
       stopFollow();
-      const panelW = open ? Math.min(760, window.innerWidth * 0.46) : 0;
+      const panelW = open ? $('panel').getBoundingClientRect().width : 0;
       map.flyTo({ center: c, zoom: lv === '4' ? Math.min(Math.max(map.getZoom(), 8), 10) : 6, padding: { left: 0, right: panelW, top: 0, bottom: 0 }, duration: 1200 });
     }
   }
-  if (open) renderPanel(e);
   writeHash();
 }
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -287,6 +312,11 @@ function renderPanel(e) {
   h += `<div class="h"><span class="k">Level II</span><span>${esc(e.na2)} ${esc(e.na2name)}</span></div>`;
   h += `<div class="h"><span class="k">Level I</span><span>${esc(e.na1)} ${esc(e.na1name)}</span></div></div>`;
   h += '<h3>What characterizes it</h3>';
+  if (TTS) {
+    h += `<div class="speakrow"><button class="speak" id="speakDesc" data-mode="desc">${SPK_ICON}<span>Read aloud</span></button>`;
+    if (e.neighbors.length) h += ` <button class="speak" id="speakNb" data-mode="nb">${SPK_ICON}<span>Read neighbor differences</span></button>`;
+    h += '</div>';
+  }
   if (e.desc) {
     h += `<div class="desc">${esc(e.desc)}</div><div class="src">Source: <a href="${esc(e.srcurl)}" target="_blank" rel="noopener">${esc(e.src)}</a> (U.S. EPA)</div>`;
   } else {
@@ -315,6 +345,7 @@ function renderPanel(e) {
   $('panelBody').scrollTop = 0;
   $('panel').hidden = false; sheetState();
   $('panelBody').querySelectorAll('[data-key]').forEach(b => b.onclick = () => selectKey(b.dataset.key, { fly: true, open: true }));
+  $('panelBody').querySelectorAll('.speak').forEach(b => b.onclick = () => toggleSpeech(b, e));
 }
 
 /* ---------- Geolocation ---------- */
@@ -339,9 +370,10 @@ function onPos(pos) {
     { type: 'Feature', geometry: { type: 'Point', coordinates: [lng, lat] }, properties: {} }] });
   if (firstFix) {
     firstFix = false; following = true;
+    toast('Location found' + (accuracy ? ` (±${accuracy < 1000 ? Math.round(accuracy * 3.281) + ' ft' : (accuracy / 1609).toFixed(1) + ' mi'})` : '') + '.');
     map.flyTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), 9), duration: 1200 });
-  } else if (following) {
-    map.easeTo({ center: [lng, lat], duration: 600 });
+  } else if (following && !map.isMoving()) {
+    map.easeTo({ center: [lng, lat], duration: 500 });
   }
   setLocateUI(following ? 'follow' : 'active');
   scheduleLookup();
@@ -357,15 +389,16 @@ function onPosErr(err) {
   } else if (err.code === 3) {
     toast(wasFirst ? 'Still looking for GPS… (timed out, retrying)' : 'GPS signal weak — waiting for a better fix.');
   } else {
-    toast('Location unavailable right now. Try again in a moment.');
-    if (wasFirst) stopLocate();
+    toast('Location unavailable right now — still trying.');
   }
 }
 function startLocate() {
   if (!('geolocation' in navigator)) { showModal('<h2>No location support</h2><p>This browser does not provide location.</p>'); return; }
   if (!window.isSecureContext) { showModal('<h2>Needs a secure page</h2><p>Location only works when this map is opened over <b>https://</b>.</p>'); return; }
   firstFix = true; setLocateUI('busy');
-  watchId = navigator.geolocation.watchPosition(onPos, onPosErr, { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
+  // quick coarse fix first (cached/network OK), then a continuous high-accuracy watch
+  navigator.geolocation.getCurrentPosition((p) => { if (watchId != null && firstFix) onPos(p); }, () => {}, { enableHighAccuracy: false, maximumAge: 600000, timeout: 15000 });
+  watchId = navigator.geolocation.watchPosition(onPos, onPosErr, { enableHighAccuracy: true, maximumAge: 10000, timeout: 30000 });
 }
 function stopLocate() {
   if (watchId != null) navigator.geolocation.clearWatch(watchId);
@@ -464,6 +497,74 @@ async function runSearch(withPlaces) {
     } catch (e) { const el = $('placeLoading'); if (el) el.textContent = 'Place search unavailable (offline?).'; }
   }
 }
+
+/* ---------- Read aloud (Web Speech API) ---------- */
+const TTS = 'speechSynthesis' in window && typeof window.SpeechSynthesisUtterance === 'function';
+const SPK_ICON = '<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3Zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4ZM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6Z"/></svg>';
+let speechSession = 0, speakingBtn = null;
+function spokenify(t) {
+  return String(t).replace(/in\/yr/g, 'inches per year').replace(/(\d) ft\b/g, '$1 feet').replace(/–/g, ' to ').replace(/—/g, ', ').replace(/\[…\]/g, '').replace(/\s+/g, ' ').trim();
+}
+function chunks(text) {
+  const out = []; let cur = '';
+  for (const s of text.split(/(?<=[.!?;])\s+/)) {
+    if ((cur + ' ' + s).length > 220 && cur) { out.push(cur); cur = s; } else cur = cur ? cur + ' ' + s : s;
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+function setSpeakBtn(b, on) {
+  if (!b) return;
+  b.classList.toggle('on', on);
+  b.querySelector('span').textContent = on ? 'Stop' : (b.dataset.mode === 'nb' ? 'Read neighbor differences' : 'Read aloud');
+}
+function stopSpeech() {
+  if (!TTS) return;
+  speechSession++;
+  window.speechSynthesis.cancel();
+  setSpeakBtn(speakingBtn, false); speakingBtn = null;
+}
+function speechText(e, mode) {
+  const lvl = e.level === 4 ? 'Level 4' : 'Level 3';
+  if (mode === 'desc') {
+    let t = `${e.name}. EPA ${lvl} ecoregion ${e.code}. `;
+    t += e.desc ? e.desc : 'No EPA description is available for this ecoregion.';
+    return t;
+  }
+  const parts = [`How ${e.name} differs from its neighbors.`];
+  for (const n of e.neighbors) {
+    let p = `Compared with ${n.code}, ${n.name}. `;
+    for (const q of n.epa || []) p += q.text + ' ';
+    for (const b of n.cmp || []) p += b.replace(/only here:/g, 'only in this region:').replace(/only there:/g, 'only in the neighbor:') + '. ';
+    if ((!n.epa || !n.epa.length) && (!n.cmp || !n.cmp.length)) p += 'No comparison available. ';
+    parts.push(p);
+  }
+  return parts.join(' ');
+}
+function pickVoice() {
+  const vs = window.speechSynthesis.getVoices() || [];
+  return vs.find(v => /^en[-_]US/i.test(v.lang) && v.localService) || vs.find(v => /^en[-_]US/i.test(v.lang)) || vs.find(v => /^en/i.test(v.lang)) || null;
+}
+function toggleSpeech(btn, e) {
+  if (speakingBtn === btn) { stopSpeech(); return; }
+  stopSpeech();
+  const session = ++speechSession; speakingBtn = btn; setSpeakBtn(btn, true);
+  const list = chunks(spokenify(speechText(e, btn.dataset.mode)));
+  const voice = pickVoice();
+  let i = 0;
+  const next = () => {
+    if (session !== speechSession) return;
+    if (i >= list.length) { setSpeakBtn(btn, false); speakingBtn = null; return; }
+    const u = new SpeechSynthesisUtterance(list[i++]);
+    if (voice) u.voice = voice;
+    u.lang = voice ? voice.lang : 'en-US'; u.rate = 1;
+    u.onend = next;
+    u.onerror = (ev) => { if (session === speechSession && ev.error !== 'interrupted' && ev.error !== 'canceled') { toast('Read aloud failed: ' + ev.error); stopSpeech(); } };
+    window.speechSynthesis.speak(u);
+  };
+  next();
+}
+if (TTS) { window.speechSynthesis.getVoices(); window.addEventListener('pagehide', () => window.speechSynthesis.cancel()); }
 
 /* ---------- Modal / toast ---------- */
 function showModal(html) { $('modalBody').innerHTML = html; $('modal').hidden = false; }
