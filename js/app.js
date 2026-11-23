@@ -12,6 +12,8 @@ const BASES = [
     attr: 'Imagery © <a href="https://www.esri.com">Esri</a>, Maxar, Earthstar Geographics, USDA, USGS, and the GIS User Community' },
   { id: 'satlab', name: 'Satellite + labels', sub: 'Esri imagery with places and boundaries', tiles: [ESRI + 'World_Imagery/MapServer/tile/{z}/{y}/{x}'], max: 19,
     attr: 'Imagery © Esri, Maxar, Earthstar Geographics; Labels © Esri', extra: 'esrilabels' },
+  { id: 'satroads', name: 'Satellite + labels + roads', sub: 'Esri imagery, subtle labels, major roads only (motorway/trunk/primary)', tiles: [ESRI + 'World_Imagery/MapServer/tile/{z}/{y}/{x}'], max: 19,
+    attr: 'Imagery © Esri, Maxar, Earthstar Geographics; Labels © Esri', extra: 'esrilabels', labelOpacity: 0.7, roads: true },
   { id: 'osm', name: 'OpenStreetMap', sub: 'Standard street map', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], max: 19, attr: OSM_ATTR },
   { id: 'rail', name: 'OpenRailwayMap', sub: 'Railways on a grey OpenStreetMap', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], max: 19, attr: OSM_ATTR, grey: true, forceORM: true },
   { id: 'topo', name: 'Esri World Topo', sub: 'Topographic map', tiles: [ESRI + 'World_Topo_Map/MapServer/tile/{z}/{y}/{x}'], max: 19,
@@ -20,16 +22,39 @@ const BASES = [
     attr: 'Map data: ' + OSM_ATTR + ', SRTM | Style: © <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)' },
   { id: 'usgs', name: 'USGS Topo', sub: 'The National Map (public domain)', tiles: ['https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}'], max: 16,
     attr: '<a href="https://www.usgs.gov/programs/national-geospatial-program/national-map">USGS The National Map</a>' },
+  { id: 'elev', name: 'Elevation', sub: 'Color-tinted elevation with hillshade (AWS Terrain Tiles)', dem: true },
   { id: 'relief', name: 'Shaded relief', sub: 'Esri World Shaded Relief (terrain only)', tiles: [ESRI + 'World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}'], max: 13,
     attr: 'Tiles © Esri — Source: Esri' },
-  { id: 'dark', name: 'Dark grey', sub: 'Esri Dark Gray Canvas — ecoregion colors pop', tiles: [ESRI + 'Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}'], max: 16,
-    attr: 'Tiles © Esri — Esri, HERE, Garmin, © OpenStreetMap contributors' },
 ];
 
 /* ---------- State (persisted in URL hash) ---------- */
-const S = { base: 'sat', l3: true, l4: true, lab: true, o3: 30, o4: 30, orm: false, hs: false, nlcd: false, onlcd: 55, tap: false, sel: null, ui: +(localStorage.getItem('ecoUi') || 15) };
+const S = { base: 'sat', l3: true, l4: true, lab: true, o3: 30, o4: 30, orm: false, hs: false, nlcd: false, onlcd: 55, tap: false, sel: null, ui: (function () { try { return localStorage.getItem('ecoUiScale') || 'auto'; } catch (e) { return 'auto'; } })() };
 let initialView = null;
-function applyUiSize() { document.documentElement.style.fontSize = S.ui + 'px'; try { localStorage.setItem('ecoUi', S.ui); } catch (e) {} }
+/* Display size: Auto = the detected device profile's default; the fixed steps override it. */
+const UI_STEPS = { xs: 0.7, s: 0.8, m: 0.9, l: 1.0, xl: 1.15 };
+const DEV = window.DEVICE || { type: 'desktop', how: 'default', model: '', defScale: 0.9 };
+function uiScale() {
+  let k = UI_STEPS[S.ui] || DEV.defScale;
+  const vv = window.visualViewport;
+  if (vv && vv.scale > 1.01) k = k / vv.scale; // page pinch-zoomed by the browser: keep controls the same physical size
+  return Math.round(k * 1000) / 1000;
+}
+function updateUiDebug() {
+  const el = document.getElementById('uiDebug'); if (!el) return;
+  const vv = window.visualViewport, k = uiScale();
+  const vw = vv ? Math.round(vv.width) : innerWidth, vh = vv ? Math.round(vv.height) : innerHeight;
+  el.textContent = `device: ${DEV.type}${DEV.model ? ' · ' + DEV.model : ''} (${DEV.how})\n` +
+    `viewport ${vw}×${vh} · screen ${screen.width}×${screen.height} · DPR ${+(window.devicePixelRatio || 1).toFixed(2)}${vv && Math.abs(vv.scale - 1) > 0.01 ? ' · zoom ' + vv.scale.toFixed(2) : ''}\n` +
+    `ui-scale ${k} (${S.ui === 'auto' || !UI_STEPS[S.ui] ? 'auto' : S.ui.toUpperCase()}) · text ${+(16 * k).toFixed(1)}px`;
+}
+function applyUiSize() {
+  if (S.ui !== 'auto' && !UI_STEPS[S.ui]) S.ui = 'auto';
+  document.documentElement.style.setProperty('--ui-scale', uiScale());
+  try { localStorage.setItem('ecoUiScale', S.ui); } catch (e) {}
+  updateUiDebug();
+}
+addEventListener('resize', () => { applyUiSize(); });
+if (window.visualViewport) visualViewport.addEventListener('resize', () => { applyUiSize(); });
 (function readHash() {
   const h = location.hash.replace(/^#/, ''); if (!h) return;
   const p = new URLSearchParams(h);
@@ -39,7 +64,8 @@ function applyUiSize() { document.documentElement.style.fontSize = S.ui + 'px'; 
   for (const k of ['l3', 'l4', 'lab', 'orm', 'hs', 'nlcd', 'tap']) if (p.has(k)) S[k] = p.get(k) === '1';
   for (const k of ['o3', 'o4', 'onlcd']) if (p.has(k)) S[k] = Math.max(0, Math.min(100, +p.get(k) || 0));
   if (p.has('sel')) S.sel = p.get('sel');
-  if ([13, 15, 17].includes(+p.get('ui'))) S.ui = +p.get('ui');
+  if (S.l4) S.l3 = true;
+  if (/^(auto|xs|s|m|l|xl)$/.test(p.get('ui') || '')) S.ui = p.get('ui');
 })();
 function writeHash() {
   if (!map) return;
@@ -83,15 +109,31 @@ async function getL4(code) {
 }
 async function getEntry(key) { const [lv, code] = key.split(':'); return lv === '3' ? (await getL3())[code] : getL4(code); }
 
+/* Elevation color ramp (metres -> color), also drawn as the legend */
+const ELEV_RAMP = [[-100, '#7fa7cf'], [0, '#6ea567'], [200, '#8fbc6a'], [500, '#c7d68a'], [900, '#eadb9c'], [1400, '#d9b071'],
+  [2000, '#b98352'], [2700, '#946b55'], [3400, '#b3a39a'], [4200, '#ffffff']];
+
+(function elevLegend() {
+  const lo = -100, hi = 4300, stops = ELEV_RAMP.map(([m, c]) => `${c} ${((m - lo) / (hi - lo) * 100).toFixed(1)}%`);
+  $('elevBar').style.background = `linear-gradient(90deg, ${stops.join(', ')})`;
+  // tick positions for 0, 4000, 8000, 12000 ft
+  [0, 4000, 8000, 12000].forEach((ft, i) => { const el = document.querySelectorAll('#elevLegend .elticks span')[i]; if (el) el.style.left = ((ft * 0.3048 - lo) / (hi - lo) * 100) + '%'; });
+})();
+
 /* ---------- Map ---------- */
 const protocol = new pmtiles.Protocol();
 maplibregl.addProtocol('pmtiles', protocol.tile);
 const PM = new URL('tiles/ecoregions.pmtiles', BASE_URL).href;
+const PMLAB = new URL('tiles/labels.pmtiles', BASE_URL).href; // one label point per polygon part (tools/labels.py)
 
 function buildStyle() {
   const sources = {
     eco: { type: 'vector', url: 'pmtiles://' + PM, attribution: 'Ecoregions: <a href="https://www.epa.gov/eco-research/ecoregions">U.S. EPA</a>' },
+    lab: { type: 'vector', url: 'pmtiles://' + PMLAB },
     esrilabels: { type: 'raster', tiles: [ESRI + 'Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, maxzoom: 19 },
+    // major roads only, as vectors so they can be filtered by class and drawn hairline-thin
+    roads: { type: 'vector', url: 'https://tiles.openfreemap.org/planet',
+      attribution: 'Roads: <a href="https://openfreemap.org">OpenFreeMap</a> © <a href="https://www.openmaptiles.org/">OpenMapTiles</a>, data ' + OSM_ATTR },
     orm: { type: 'raster', tiles: ['https://tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png'], tileSize: 256, maxzoom: 19,
       attribution: 'Railways: <a href="https://www.openrailwaymap.org/">OpenRailwayMap</a> (<a href="https://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA 2.0</a>), data ' + OSM_ATTR },
     hillshade: { type: 'raster', tiles: [ESRI + 'Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, maxzoom: 16, attribution: 'Hillshade © Esri' },
@@ -99,7 +141,18 @@ function buildStyle() {
       tiles: ['https://www.mrlc.gov/geoserver/mrlc_display/wms?service=WMS&version=1.1.1&request=GetMap&layers=NLCD_2021_Land_Cover_L48&styles=&format=image/png&transparent=true&srs=EPSG:3857&width=256&height=256&bbox={bbox-epsg-3857}'] },
   };
   const layers = [{ id: 'bg', type: 'background', paint: { 'background-color': '#0b0f14' } }];
+  // Elevation base: Terrarium-encoded DEM tiles, colored by elevation (hypsometric tint) with a soft hillshade
+  sources.dem = { type: 'raster-dem', encoding: 'terrarium', tileSize: 256, maxzoom: 12,
+    tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+    attribution: 'Elevation: <a href="https://registry.opendata.aws/terrain-tiles/">AWS Terrain Tiles</a> (Mapzen; USGS 3DEP, SRTM, GMTED2010, ETOPO1)' };
   for (const b of BASES) {
+    if (b.dem) {
+      layers.push({ id: 'elev-relief', type: 'color-relief', source: 'dem', layout: { visibility: 'none' },
+        paint: { 'color-relief-color': ['interpolate', ['linear'], ['elevation'], ...ELEV_RAMP.flat()] } },
+        { id: 'elev-shade', type: 'hillshade', source: 'dem', layout: { visibility: 'none' },
+          paint: { 'hillshade-exaggeration': 0.4, 'hillshade-shadow-color': '#2b2118', 'hillshade-highlight-color': '#ffffff', 'hillshade-accent-color': '#2b2118' } });
+      continue;
+    }
     sources['base-' + b.id] = { type: 'raster', tiles: b.tiles, tileSize: 256, maxzoom: b.max, attribution: b.attr };
     layers.push({ id: 'base-' + b.id, type: 'raster', source: 'base-' + b.id, layout: { visibility: 'none' },
       paint: b.grey ? { 'raster-saturation': -1, 'raster-brightness-max': 0.75, 'raster-contrast': 0.1 } : {} });
@@ -117,30 +170,56 @@ function buildStyle() {
     { id: 'l4-line', type: 'line', source: 'eco', 'source-layer': 'l4', minzoom: 5.5,
       paint: { 'line-color': '#ffffff', 'line-opacity': 0.75, 'line-width': ['interpolate', ['linear'], ['zoom'], 5.5, 0.4, 9, 1.2, 12, 2] } },
     { id: 'l3-casing', type: 'line', source: 'eco', 'source-layer': 'l3',
-      paint: { 'line-color': '#000000', 'line-opacity': 0.6, 'line-width': ['interpolate', ['linear'], ['zoom'], 3, 2, 8, 5, 12, 7] } },
+      paint: { 'line-color': '#000000', 'line-opacity': 0.6, 'line-width': ['interpolate', ['linear'], ['zoom'], 3, 2.2, 8, 5.5, 12, 7.7] } }, // L3 boundaries: +10% vs v2
     { id: 'l3-line', type: 'line', source: 'eco', 'source-layer': 'l3',
-      paint: { 'line-color': '#ffffff', 'line-width': ['interpolate', ['linear'], ['zoom'], 3, 0.8, 8, 2.4, 12, 3.5] } },
+      paint: { 'line-color': '#ffffff', 'line-width': ['interpolate', ['linear'], ['zoom'], 3, 0.88, 8, 2.64, 12, 3.85] } },
     { id: 'orm', type: 'raster', source: 'orm', layout: { visibility: 'none' } },
+    { id: 'majorroads', type: 'line', source: 'roads', 'source-layer': 'transportation', layout: { visibility: 'none', 'line-cap': 'round', 'line-join': 'round' },
+      filter: ['all', ['!=', ['get', 'ramp'], 1], ['!=', ['get', 'brunnel'], 'tunnel'],
+        ['any', ['match', ['get', 'class'], ['motorway', 'trunk'], true, false], ['all', ['==', ['get', 'class'], 'primary'], ['>=', ['zoom'], 7]]]],
+      paint: { 'line-color': ['match', ['get', 'class'], 'motorway', '#ffd9a0', 'trunk', '#ffe8bf', '#f2f2f2'],
+        'line-opacity': ['match', ['get', 'class'], 'primary', 0.45, 0.6],
+        'line-width': ['interpolate', ['linear'], ['zoom'], 4, ['match', ['get', 'class'], 'primary', 0.4, 0.5], 10, ['match', ['get', 'class'], 'primary', 0.7, 0.9], 14, ['match', ['get', 'class'], 'primary', 0.9, 1.1]] } },
     { id: 'esrilabels', type: 'raster', source: 'esrilabels', layout: { visibility: 'none' } },
     { id: 'sel-line', type: 'line', source: 'eco', 'source-layer': 'l4', filter: ['==', 'c4', '__none__'],
       paint: { 'line-color': '#ffd23f', 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 3, 10, 6] } },
     { id: 'sel3-line', type: 'line', source: 'eco', 'source-layer': 'l3', filter: ['==', 'c3', '__none__'],
       paint: { 'line-color': '#ffd23f', 'line-width': ['interpolate', ['linear'], ['zoom'], 3, 3, 10, 6] } },
-    { id: 'l4-label', type: 'symbol', source: 'eco', 'source-layer': 'l4lab', minzoom: 7,
-      layout: { 'text-field': ['concat', ['get', 'code'], '  ', ['get', 'name']], 'text-font': ['Open Sans Semibold'],
-        'text-size': ['interpolate', ['linear'], ['zoom'], 7, 13, 10, 17, 13, 20], 'text-max-width': 9, 'symbol-sort-key': ['-', 0, ['get', 'area']], 'text-padding': 6 },
-      paint: { 'text-color': '#fff6c8', 'text-halo-color': '#000', 'text-halo-width': 2 } },
-    { id: 'l3-label', type: 'symbol', source: 'eco', 'source-layer': 'l3lab', minzoom: 3, maxzoom: 8.5,
-      filter: ['any', ['==', ['get', 'rank'], 0], ['>=', ['zoom'], 5.5]],
-      layout: { 'text-field': ['concat', ['get', 'code'], '  ', ['get', 'name']], 'text-font': ['Open Sans Semibold'],
-        'text-size': ['interpolate', ['linear'], ['zoom'], 3, 12, 5, 16, 8, 21], 'text-max-width': 8, 'symbol-sort-key': ['-', 0, ['get', 'area']], 'text-padding': 4 },
-      paint: { 'text-color': '#ffffff', 'text-halo-color': '#000', 'text-halo-width': 2.2 } },
+    // Labels: code on its own line (bold, colored) above the name. L3 = larger, caps, letter-spaced, blue code;
+    // L4 = smaller, title case, yellow code. Names wrap at ~12-14 characters. One point per polygon part
+    // (pole of inaccessibility, tools/labels.py); parts appear only once big enough on screen (minz).
+    { id: 'l4-label', type: 'symbol', source: 'lab', 'source-layer': 'l4lab', minzoom: 7,
+      filter: ['>=', ['zoom'], ['get', 'minz']],
+      layout: { 'text-field': ['format', ['get', 'code'], { 'font-scale': 1.0, 'text-font': ['literal', ['Open Sans Bold']], 'text-color': '#ffd23f' },
+          '\n', {}, ['get', 'name'], { 'font-scale': 0.86, 'text-font': ['literal', ['Open Sans Semibold']], 'text-color': '#fffaf0' }],
+        'text-font': ['Open Sans Semibold'], 'text-line-height': 1.1,
+        'text-size': ['interpolate', ['linear'], ['zoom'], 7, 12, 10, 14.5, 13, 16.5], 'text-max-width': 7.5,
+        'symbol-sort-key': ['-', 0, ['get', 'r']], 'text-padding': 8 },
+      paint: { 'text-halo-color': 'rgba(0,0,0,.85)', 'text-halo-width': 1.6, 'text-halo-blur': 0.4 } },
+    { id: 'l3-label', type: 'symbol', source: 'lab', 'source-layer': 'l3lab', minzoom: 3, maxzoom: 8.5,
+      // largest part of each region from z3; other parts once they are big enough on screen (minz), never before z4.5
+      filter: ['any', ['==', ['get', 'rank'], 0], ['>=', ['zoom'], ['max', 4.5, ['get', 'minz']]]],
+      layout: { 'text-field': ['format', ['get', 'code'], { 'font-scale': 1.2, 'text-font': ['literal', ['Open Sans Bold']], 'text-color': '#9ad0ff' },
+          '\n', {}, ['upcase', ['get', 'name']], { 'font-scale': 0.82, 'text-font': ['literal', ['Open Sans Semibold']], 'text-color': '#ffffff' }],
+        'text-font': ['Open Sans Semibold'], 'text-letter-spacing': 0.08, 'text-line-height': 1.1,
+        'text-size': ['interpolate', ['linear'], ['zoom'], 3, 12, 5, 15, 8, 19, 12, 21], 'text-max-width': 8.5,
+        'symbol-sort-key': ['-', 0, ['get', 'r']], 'text-padding': 14 },
+      paint: { 'text-halo-color': 'rgba(0,0,0,.85)', 'text-halo-width': 1.8, 'text-halo-blur': 0.4 } },
     { id: 'me-acc', type: 'fill', source: 'me', filter: ['==', '$type', 'Polygon'], paint: { 'fill-color': '#ff3b3b', 'fill-opacity': 0.15 } },
     { id: 'me-acc-line', type: 'line', source: 'me', filter: ['==', '$type', 'Polygon'], paint: { 'line-color': '#ff3b3b', 'line-width': 2 } },
     { id: 'me-halo', type: 'circle', source: 'me', filter: ['==', '$type', 'Point'], paint: { 'circle-radius': 20, 'circle-color': '#ff3b3b', 'circle-opacity': 0.3 } },
     { id: 'me-dot', type: 'circle', source: 'me', filter: ['==', '$type', 'Point'], paint: { 'circle-radius': 10, 'circle-color': '#ff1f1f', 'circle-stroke-color': '#fff', 'circle-stroke-width': 3 } },
   );
   sources.me = { type: 'geojson', data: { type: 'FeatureCollection', features: [] } };
+  sources.forced = { type: 'geojson', data: { type: 'FeatureCollection', features: [] } };
+  for (const lv of [3, 4]) {
+    const base = layers.find(l => l.id === 'l' + lv + '-label');
+    const before = layers.findIndex(l => l.id === 'me-acc');
+    layers.splice(before, 0, { id: 'l' + lv + '-forced', type: 'symbol', source: 'forced', filter: ['==', ['get', 'lvl'], lv],
+      layout: { ...base.layout, 'text-allow-overlap': true, 'text-ignore-placement': true, 'symbol-sort-key': undefined,
+        'text-size': lv === 3 ? 19 : 15 }, paint: base.paint });
+    delete layers[before].layout['symbol-sort-key'];
+  }
   return { version: 8, glyphs: BASE_URL + 'vendor/fonts/{fontstack}/{range}.pbf', sources, layers };
 }
 
@@ -178,6 +257,80 @@ map.on('load', async () => {
   document.body.dataset.ready = '1';
 });
 map.on('moveend', writeHash);
+
+/* ---------- Forced labels for regions that dominate the view ----------
+   Tile labels can be missing when one region fills the screen (its label points are off screen or lose
+   a collision). After each move/zoom (debounced) a 20x12 grid of points over the visible map is sampled;
+   any Level III region (and Level IV region, when Level IV is on) covering more than 30% of the view gets a
+   label drawn at the sampled point nearest the centroid of its samples, regardless of collisions. */
+const FORCE_SHARE = 0.30, GRID_X = 20, GRID_Y = 12;
+function visibleBox() {
+  const c = map.getCanvas(); let w = c.clientWidth, h = c.clientHeight;
+  if (!$('panel').hidden) {
+    const r = $('panel').getBoundingClientRect();
+    if (DEV.type === 'phone') h = Math.max(50, h - r.height); else w = Math.max(50, w - r.width - 12);
+  }
+  return { w, h };
+}
+function dominantRegions(hitLayer, prop, nameProp, box) {
+  const counts = new Map();
+  for (let i = 0; i < GRID_X; i++) for (let j = 0; j < GRID_Y; j++) {
+    const x = (i + 0.5) * box.w / GRID_X, y = (j + 0.5) * box.h / GRID_Y;
+    const f = map.queryRenderedFeatures([x, y], { layers: [hitLayer] })[0];
+    if (!f || !f.properties[prop]) continue;
+    const k = f.properties[prop];
+    if (!counts.has(k)) counts.set(k, { code: k, name: f.properties[nameProp], pts: [] });
+    counts.get(k).pts.push([x, y]);
+  }
+  const out = [];
+  for (const r of counts.values()) {
+    const share = r.pts.length / (GRID_X * GRID_Y);
+    if (share <= FORCE_SHARE) continue;
+    const cx = r.pts.reduce((a, p) => a + p[0], 0) / r.pts.length, cy = r.pts.reduce((a, p) => a + p[1], 0) / r.pts.length;
+    let best = r.pts[0], bd = Infinity;  // nearest sample to the centroid, so the label is always inside the region
+    for (const p of r.pts) { const d = (p[0] - cx) ** 2 + (p[1] - cy) ** 2; if (d < bd) { bd = d; best = p; } }
+    out.push({ code: r.code, name: r.name, share, pt: best });
+  }
+  return out;
+}
+let forceTimer = null; const BASE_FILTERS = {};
+function updateForcedLabels() {
+  const src = map.getSource('forced'); if (!src) return;
+  const feats = [], dbg = [];
+  if (S.lab) {
+    const box = visibleBox();
+    const lv = [];
+    if (S.l3) lv.push([3, 'l3-hit', 'c3', 'n3']);
+    if (S.l4 && map.getZoom() >= 5.5) lv.push([4, 'l4-hit', 'c4', 'n4']);
+    const placed = [];
+    for (const [level, hit, prop, nm] of lv) {
+      for (const r of dominantRegions(hit, prop, nm, box)) {
+        let [x, y] = r.pt;
+        // keep an L3 and an L4 forced label from sitting on top of each other
+        for (const q of placed) if (Math.abs(q[0] - x) < 160 && Math.abs(q[1] - y) < 60) y = q[1] + (level === 4 ? 64 : -64);
+        y = Math.max(40, Math.min(box.h - 40, y));
+        placed.push([x, y]);
+        const ll = map.unproject([x, y]);
+        feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [ll.lng, ll.lat] }, properties: { code: r.code, name: r.name, lvl: level } });
+        dbg.push(`${level}:${r.code} ${(r.share * 100).toFixed(0)}%`);
+      }
+    }
+  }
+  src.setData({ type: 'FeatureCollection', features: feats });
+  // a forced label replaces that region's tile labels while it dominates the view (no duplicates)
+  for (const lv of [3, 4]) {
+    const id = 'l' + lv + '-label', codes = feats.filter(f => f.properties.lvl === lv).map(f => f.properties.code);
+    if (!BASE_FILTERS[id]) BASE_FILTERS[id] = map.getFilter(id);
+    map.setFilter(id, codes.length ? ['all', BASE_FILTERS[id], ['!', ['in', ['get', 'code'], ['literal', codes]]]] : BASE_FILTERS[id]);
+  }
+  window.__forced = dbg;
+}
+function scheduleForced() { clearTimeout(forceTimer); forceTimer = setTimeout(updateForcedLabels, 180); }
+map.on('moveend', scheduleForced);
+map.on('idle', () => { if (!window.__forcedOnce) { window.__forcedOnce = true; updateForcedLabels(); } });
+map.on('sourcedata', (e) => { if (e.sourceId === 'eco' && e.isSourceLoaded && !map.isMoving()) scheduleForced(); });
+map.on('movestart', () => { clearTimeout(forceTimer); });
+window.__updateForced = updateForcedLabels;
 map.on('error', (e) => { if (e && e.error) console.warn('map error', e.error.message || e.error); });
 
 function vis(id, on) { if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none'); }
@@ -185,19 +338,24 @@ function applyLayers() {
   const base = BASES.find(b => b.id === S.base) || BASES[0];
   for (const b of BASES) vis('base-' + b.id, b.id === base.id);
   vis('esrilabels', base.extra === 'esrilabels');
+  map.setPaintProperty('esrilabels', 'raster-opacity', base.labelOpacity || 1);
+  vis('majorroads', !!base.roads);
+  vis('elev-relief', !!base.dem); vis('elev-shade', !!base.dem);
+  $('elevLegend').hidden = !base.dem;
   vis('orm', S.orm || !!base.forceORM);
   vis('hillshade', S.hs);
   vis('nlcd', S.nlcd);
   map.setPaintProperty('nlcd', 'raster-opacity', S.onlcd / 100);
   vis('l3-fill', S.l3); vis('l3-line', S.l3); vis('l3-casing', S.l3);
   vis('l4-fill', S.l4); vis('l4-line', S.l4);
-  vis('l3-label', S.l3 && S.lab); vis('l4-label', S.l4 && S.lab);
+  vis('l3-label', S.l3 && S.lab); vis('l4-label', S.l4 && S.lab); vis('l3-forced', S.l3 && S.lab); vis('l4-forced', S.l4 && S.lab);
   // when L4 is off, keep L3 fill at all zooms; otherwise hand over to L4 when zoomed in
   map.setLayerZoomRange('l3-fill', 0, S.l4 ? 5.5 : 24);
-  map.setLayerZoomRange('l3-label', 3, S.l4 ? 8.5 : 24);
+  map.setLayerZoomRange('l3-label', 3, S.l4 ? 8.5 : 24); // L4 off: Level III labels stay on at every zoom
   map.setPaintProperty('l3-fill', 'fill-opacity', S.o3 / 100);
   map.setPaintProperty('l4-fill', 'fill-opacity', S.o4 / 100);
   writeHash();
+  scheduleForced();
 }
 
 /* ---------- Drawer ---------- */
@@ -211,15 +369,17 @@ function buildDrawer() {
     list.appendChild(el);
   }
   const bindT = (id, key) => { $(id).onchange = () => { S[key] = $(id).checked; applyLayers(); }; };
-  bindT('tL3', 'l3'); bindT('tL4', 'l4'); bindT('tLab', 'lab'); bindT('tORM', 'orm'); bindT('tHS', 'hs'); bindT('tNLCD', 'nlcd');
+  // hierarchy: Level IV requires Level III
+  $('tL3').onchange = () => { S.l3 = $('tL3').checked; if (!S.l3 && S.l4) { S.l4 = false; toast('Level IV turned off too: it sits inside Level III.'); } syncDrawer(); applyLayers(); };
+  $('tL4').onchange = () => { S.l4 = $('tL4').checked; if (S.l4 && !S.l3) S.l3 = true; syncDrawer(); applyLayers(); }; bindT('tLab', 'lab'); bindT('tORM', 'orm'); bindT('tHS', 'hs'); bindT('tNLCD', 'nlcd');
   const bindO = (id, key) => { $(id).oninput = () => { S[key] = +$(id).value; $(id + 'v').textContent = S[key] + '%'; applyLayers(); }; };
   bindO('oL3', 'o3'); bindO('oL4', 'o4'); bindO('oNLCD', 'onlcd');
-  $('uiSize').querySelectorAll('button').forEach(b => b.onclick = () => { S.ui = +b.dataset.s; applyUiSize(); syncDrawer(); writeHash(); setTimeout(() => map.resize(), 50); });
+  $('uiSize').querySelectorAll('button').forEach(b => b.onclick = () => { S.ui = b.dataset.s; applyUiSize(); syncDrawer(); writeHash(); setTimeout(() => map.resize(), 50); });
   syncDrawer();
 }
 function syncDrawer() {
   for (const el of $('baseList').children) el.setAttribute('aria-checked', el.dataset.id === S.base);
-  $('uiSize').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', +b.dataset.s === S.ui));
+  $('uiSize').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.s === S.ui));
   $('tL3').checked = S.l3; $('tL4').checked = S.l4; $('tLab').checked = S.lab; $('tORM').checked = S.orm; $('tHS').checked = S.hs; $('tNLCD').checked = S.nlcd;
   for (const [id, k] of [['oL3', 'o3'], ['oL4', 'o4'], ['oNLCD', 'onlcd']]) { $(id).value = S[k]; $(id + 'v').textContent = S[k] + '%'; }
 }
@@ -228,6 +388,13 @@ document.querySelectorAll('[data-close]').forEach(b => b.onclick = () => {
   $(b.dataset.close).hidden = true; sheetState();
   if (b.dataset.close === 'panel') { stopSpeech(); clearSelection(); }
 });
+function setCollapsed(c) {
+  $('panel').classList.toggle('collapsed', c);
+  $('panelCollapse').textContent = c ? '▴' : '▾';
+  $('panelCollapse').setAttribute('aria-expanded', !c);
+  $('panelCollapse').setAttribute('aria-label', c ? 'Expand panel' : 'Collapse panel');
+}
+$('panelCollapse').onclick = () => setCollapsed(!$('panel').classList.contains('collapsed'));
 $('aboutLink').onclick = (e) => { e.preventDefault(); showModal(ABOUT); };
 
 /* ---------- Zoom / reset ---------- */
@@ -294,8 +461,9 @@ async function selectKey(key, { fly = true, open = true } = {}) {
     const c = CENTERS[key];
     if (c) {
       stopFollow();
-      const panelW = open ? $('panel').getBoundingClientRect().width : 0;
-      map.flyTo({ center: c, zoom: lv === '4' ? Math.min(Math.max(map.getZoom(), 8), 10) : 6, padding: { left: 0, right: panelW, top: 0, bottom: 0 }, duration: 1200 });
+      const r = open ? $('panel').getBoundingClientRect() : null, sheet = DEV.type === 'phone';
+      const pad = { left: 0, top: 0, right: r && !sheet ? r.width : 0, bottom: r && sheet ? r.height : 0 };
+      map.flyTo({ center: c, zoom: lv === '4' ? Math.min(Math.max(map.getZoom(), 8), 10) : 6, padding: pad, duration: 1200 });
     }
   }
   writeHash();
@@ -343,7 +511,7 @@ function renderPanel(e) {
   h += `<p class="note">Neighbors share a boundary at this level. Quotes are verbatim from EPA text; keyword bullets list terms that appear in one region's EPA description but not the other's, so check the full text for nuance.</p>`;
   $('panelBody').innerHTML = h;
   $('panelBody').scrollTop = 0;
-  $('panel').hidden = false; sheetState();
+  $('panel').hidden = false; setCollapsed(false); sheetState();
   $('panelBody').querySelectorAll('[data-key]').forEach(b => b.onclick = () => selectKey(b.dataset.key, { fly: true, open: true }));
   $('panelBody').querySelectorAll('.speak').forEach(b => b.onclick = () => toggleSpeech(b, e));
 }
@@ -499,7 +667,7 @@ async function runSearch(withPlaces) {
 }
 
 /* ---------- Read aloud (Web Speech API) ---------- */
-const TTS = 'speechSynthesis' in window && typeof window.SpeechSynthesisUtterance === 'function';
+const TTS = !!window.speechSynthesis && typeof window.SpeechSynthesisUtterance === 'function';
 const SPK_ICON = '<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3Zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4ZM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6Z"/></svg>';
 let speechSession = 0, speakingBtn = null;
 function spokenify(t) {

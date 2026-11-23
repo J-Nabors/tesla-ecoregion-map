@@ -6,6 +6,38 @@
 <meta name="theme-color" content="#0b0f14">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%226%22 fill=%22%230b0f14%22/%3E%3Cpath d=%22M4 22 12 8l6 9 4-5 6 10z%22 fill=%22%2334d399%22/%3E%3C/svg%3E">
 <title>Ecoregion Map</title>
+<script>
+/* Device profile detection, run before first paint. Sets <html data-device> and --ui-scale.
+   Override for testing: ?device=tesla|phone|tablet|desktop */
+(function () {
+  var ua = navigator.userAgent || '', q = new URLSearchParams(location.search), d = (q.get('device') || '').toLowerCase(), how = 'URL override';
+  var model = '', mm = ua.match(/TESLA_MODEL([3SXY])\b/i);
+  var sw = screen.width, sh = screen.height, dpr = window.devicePixelRatio || 1;
+  var touch = (navigator.maxTouchPoints || 0) > 0 || 'ontouchstart' in window;
+  var short = Math.min(sw, sh);
+  if (!/^(tesla|phone|tablet|desktop)$/.test(d)) {
+    if (/Tesla|QtCarBrowser/.test(ua)) { d = 'tesla'; how = 'user agent'; }
+    else if (/iPhone|iPod/.test(ua) || (/Android/.test(ua) && /Mobile/.test(ua)) || /Windows Phone|Mobile Safari/.test(ua) && !/iPad/.test(ua)) { d = 'phone'; how = 'user agent'; }
+    else if (/iPad|Tablet|Silk|Kindle/.test(ua) || /Android/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) { d = 'tablet'; how = 'user agent'; }
+    else if (touch && matchMedia('(pointer:coarse)').matches && short < 600) { d = 'phone'; how = 'touch screen size'; }
+    else if (touch && matchMedia('(pointer:coarse)').matches && short < 1100) { d = 'tablet'; how = 'touch screen size'; }
+    else { d = 'desktop'; how = 'default'; }
+  }
+  if (d === 'tesla') {
+    if (mm) model = 'Model ' + mm[1].toUpperCase() + ' (from user agent)';
+    else {
+      var pw = Math.round(Math.max(sw, sh) * dpr), ph = Math.round(short * dpr);
+      if (Math.abs(pw - 2200) < 80 && Math.abs(ph - 1300) < 80) model = 'S/X-size screen (guess from screen)';
+      else if (Math.abs(pw - 1920) < 80 && Math.abs(ph - 1200) < 80) model = '3/Y-size screen (guess from screen)';
+      else model = 'model unknown';
+    }
+  }
+  var DEF = { tesla: 0.8, phone: 1, tablet: 0.95, desktop: 0.9 };
+  window.DEVICE = { type: d, how: how, model: model, defScale: DEF[d] };
+  document.documentElement.dataset.device = d;
+  document.documentElement.style.setProperty('--ui-scale', DEF[d]);
+})();
+</script>
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
 <link rel="stylesheet" href="css/app.css">
 </head>
@@ -42,6 +74,9 @@
   </button>
 </div>
 
+<!-- Elevation legend (shown with the Elevation base map) -->
+<div id="elevLegend" class="card" hidden><div class="elt">Elevation</div><div id="elevBar"></div><div class="elticks"><span>0</span><span>4,000</span><span>8,000</span><span>12,000 ft</span></div></div>
+
 <!-- Layer drawer -->
 <aside id="drawer" class="sheet left" hidden aria-label="Layers">
   <header><h2>Layers</h2><button class="btn close" data-close="drawer" aria-label="Close">✕</button></header>
@@ -62,8 +97,9 @@
       <div class="row toggle"><label><input type="checkbox" id="tNLCD"><span>Land cover (NLCD 2021)</span></label></div>
       <div class="row slider"><span>Land cover</span><input type="range" id="oNLCD" min="0" max="100" value="55"><output id="oNLCDv">55%</output></div>
     </details>
-    <details class="sec"><summary>Display size</summary>
-      <div class="row"><div class="seg" id="uiSize"><button data-s="13">Small</button><button data-s="15">Medium</button><button data-s="17">Large</button></div></div>
+    <details class="sec" id="secSize"><summary>Display size</summary>
+      <div class="row"><div class="seg" id="uiSize"><button data-s="auto">Auto</button><button data-s="xs">XS</button><button data-s="s">S</button><button data-s="m">M</button><button data-s="l">L</button><button data-s="xl">XL</button></div></div>
+      <div class="dbg" id="uiDebug"></div>
       <p class="note">Ecoregion data: U.S. EPA Level III &amp; IV ecoregions. Descriptions from EPA ecoregion documents and state posters. <a href="#" id="aboutLink">About this map</a></p>
     </details>
   </div>
@@ -71,7 +107,7 @@
 
 <!-- Info panel -->
 <aside id="panel" class="sheet right" hidden aria-label="Ecoregion details">
-  <header><div id="panelTitle"></div><button class="btn close" data-close="panel" aria-label="Close">✕</button></header>
+  <header><div id="panelTitle"></div><button class="btn close" id="panelCollapse" aria-label="Collapse panel" aria-expanded="true">▾</button><button class="btn close" data-close="panel" aria-label="Close">✕</button></header>
   <div id="panelBody" class="sheetbody"></div>
 </aside>
 

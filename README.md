@@ -3,8 +3,9 @@
 A touch-first web map of the U.S. EPA **Level III and Level IV ecoregions**, built for a car's touchscreen browser (Tesla, used while parked) and any modern browser. It is a static site with no build step, ready for GitHub Pages.
 
 ## Features
-- **Ecoregion overlays:** EPA Level III (conterminous U.S. and Alaska) and Level IV (conterminous U.S.). Each level has its own on/off switch, opacity slider and labels (code and name) that appear at sensible zooms. Level IV takes over from Level III as you zoom in.
-- **Base maps:** Satellite (Esri World Imagery), Satellite with labels, OpenStreetMap, OpenRailwayMap (railways over a grey OSM), Esri World Topo, OpenTopoMap, USGS Topo (The National Map), Esri Shaded Relief and Esri Dark Gray.
+- **Ecoregion overlays:** EPA Level III (conterminous U.S. and Alaska) and Level IV (conterminous U.S.). Each level has its own on/off switch and opacity slider. Level IV sits inside Level III, so turning Level IV on also turns Level III on, and turning Level III off also turns Level IV off. Level III boundaries are heavier than Level IV boundaries.
+- **Labels:** the code sits on its own line above the name. Level III codes are blue with names in capitals; Level IV codes are yellow with names in title case and a smaller size. Every polygon part gets its own label point (pole of inaccessibility), but only once that part is big enough on screen, so slivers stay unlabeled. Very large parts get extra labels spread about 950 px apart as you zoom in. When the region under the map centre has no label on screen, a small chip at the top names it (tap it for details). With Level IV off, Level III labels stay on at every zoom; with both on, Level III labels show at lower zooms and Level IV labels take over from zoom 7.
+- **Base maps:** Satellite (Esri World Imagery), Satellite with labels, Satellite + labels + roads (Esri imagery, subtle Esri place labels, and only motorway, trunk and primary roads drawn as hairlines from OpenFreeMap vector tiles), OpenStreetMap, OpenRailwayMap (railways over a grey OSM), Esri World Topo, OpenTopoMap, USGS Topo (The National Map), Esri Shaded Relief and Esri Dark Gray.
 - **Extra overlays:** OpenRailwayMap railways (on any base map), Esri hillshade and NLCD 2021 land cover (MRLC WMS, lower 48).
 - **Locate button:** shows a red position dot and accuracy circle. It has a follow mode (dragging the map stops following) and shows a clear message when location permission is denied or the page isn't on https. A "You are in" card shows your current Level IV and Level III ecoregion. It comes from the vector tiles, with a fallback to EPA's ArcGIS service. Tap the card to open full details.
 - **Tap info toggle:** off by default, so panning never pops up anything. When it is on, tapping a region highlights it and opens a side panel with:
@@ -14,7 +15,14 @@ A touch-first web map of the U.S. EPA **Level III and Level IV ecoregions**, bui
 - **Search:** ecoregion names and codes are searched instantly on the device. Places are searched through OSM Nominatim when you press Go.
 - **URL hash:** the address remembers the view, base map, layers, opacity, tap mode and the selected region, so you can bookmark it.
 - **Read aloud:** the info panel can speak the region's name and EPA description, or its neighbor differences, using the browser's built-in speech (Web Speech API). The button turns into Stop while speaking. Speech stops when the panel closes or another region is picked, and the buttons are hidden if the browser has no speech support.
-- **Compact touch UI:** about 45 px controls, a floating layers card (base-map grid, collapsible opacity, overlay and display-size sections), a high-contrast dark theme, no hover-only features, pinch zoom and pan, and rotation and pitch disabled. A **Display size** setting (Small, Medium, Large) scales the whole interface; it is saved on the device and in the URL (`ui=13|15|17`).
+- **Device profiles:** a small script in `index.html` sets `<html data-device=…>` before the first paint:
+  - `tesla`: user agent contains `Tesla` or `QtCarBrowser`. Compact UI (default scale 0.8: about 33 px buttons, 12.8 px text, 384 px info panel at 1920 px wide). Newer Tesla software adds the model to the user agent (`TESLA_MODEL3`, `TESLA_MODELY`, `TESLA_MODELS`, `TESLA_MODELX`), which the debug line shows. Older software doesn't, so the screen size is used as a hint (1920×1200 means a Model 3 or Y screen, 2200×1300 a Model S or X screen).
+  - `phone`: iPhone or Android phone. 44 px touch targets, 16 px text, and the info panel opens as a bottom sheet.
+  - `tablet`: iPad (including iPadOS desktop mode) or Android tablet. 44 px targets, medium text.
+  - `desktop`: everything else. Normal desktop sizing.
+  - For testing, add `?device=tesla|phone|tablet|desktop` to the URL.
+- **Display size:** Auto (the device profile's default), XS, S, M, L or XL. Every size comes from one CSS variable, `--ui-scale`. The choice is saved on the device and in the URL (`ui=auto|xs|s|m|l|xl`). The Display size section also shows a debug line with the detected device, viewport, screen, device pixel ratio and current scale.
+- **Info panel:** about 384 px wide on a 1920 px Tesla screen. It can be collapsed to its title bar with the ▾ button.
 
 ## Data sources
 | What | Source |
@@ -53,4 +61,6 @@ The polygons were turned into a single PMTiles vector tileset (`tiles/ecoregions
 ## Development
 Serve locally with any server that supports range requests, for example `npx http-server . -p 8765`. Python's `http.server` does not support range requests, so PMTiles won't load with it. `tools/build.sh` documents the full rebuild from EPA sources and needs pyshp, shapely, pyproj, mapshaper, tippecanoe, poppler and LibreOffice.
 
-Libraries: MapLibre GL JS 5 (BSD-3) and PMTiles JS (BSD-3) are vendored in `vendor/`, along with Open Sans Semibold glyphs (OFL) from the MapLibre demo tiles.
+Libraries: MapLibre GL JS 5 (BSD-3) and PMTiles JS (BSD-3) are vendored in `vendor/`, along with Open Sans Semibold, Bold and Regular glyphs (OFL) from the MapLibre demo tiles and openmaptiles/fonts.
+
+Label points live in `tiles/labels.pmtiles`, built by `tools/labels.py`.

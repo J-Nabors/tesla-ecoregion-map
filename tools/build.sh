@@ -24,3 +24,7 @@ cd $SRC/gj && tippecanoe -o $SITE/tiles/ecoregions.pmtiles --force -Z0 -z11 \
   -L'{"file":"l3_all.json","layer":"l3"}' -L'{"file":"l4.json","layer":"l4","minzoom":4}' \
   -L"{\"file\":\"$BUILD/labels_l3.json\",\"layer\":\"l3lab\"}" -L"{\"file\":\"$BUILD/labels_l4.json\",\"layer\":\"l4lab\",\"minzoom\":5}" \
   --detect-shared-borders --simplification=4 --no-tile-size-limit --no-feature-limit -r1
+# Label points (one per polygon part + repeats inside very large parts) live in their own small tileset.
+cd $BUILD && tippecanoe -o $SITE/tiles/labels.pmtiles --force -Z0 -z11 \
+  -L'{"file":"labels_l3.json","layer":"l3lab"}' -L'{"file":"labels_l4.json","layer":"l4lab","minzoom":5}' \
+  -r1 --no-feature-limit --no-tile-size-limit
